@@ -11,8 +11,12 @@ chrome://extensions/
 if ur using chrome but it should work on others too
 then press upload unpacked and put the folder in turn all settings on 
 and once you have 
+
+
 sparx:
     sparks open you the extension and put your api key in then save after it should show you awnser + bookwork 
+
+
 seneca: or any other programs:
     put api in press awnser 
 
