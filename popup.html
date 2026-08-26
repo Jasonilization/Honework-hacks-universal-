@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Sparx AI</title>
+
+    <link rel="stylesheet" href="popup.css">
+
+</head>
+
+<body>
+
+    <div class="header">
+
+        <div>
+
+            <div class="logo">
+                SPARX<span>_AI</span>
+            </div>
+
+            <div class="subtitle">
+                MATHS INTELLIGENCE SYSTEM
+            </div>
+
+        </div>
+
+        <div class="status">
+
+            <span id="dot"></span>
+
+            <span id="statusText">
+                OFFLINE
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <div class="line"></div>
+
+
+    <!-- API KEY -->
+
+    <div class="panel">
+
+        <div class="label">
+            GEMINI API KEY
+        </div>
+
+        <input
+            id="apiKey"
+            type="password"
+            placeholder="Paste Gemini API key"
+        >
+
+        <button id="saveKey">
+            [ SAVE KEY ]
+        </button>
+
+    </div>
+
+
+    <!-- SCREEN SCANNER -->
+
+    <div class="panel">
+
+        <div class="label">
+            SCREEN ANALYSIS
+        </div>
+
+        <div class="info">
+
+            Captures the current browser tab
+            temporarily and asks Gemini to
+            analyse the visible maths question.
+
+        </div>
+
+        <button id="scan">
+            [ ANALYZE CURRENT SCREEN ]
+        </button>
+
+    </div>
+
+
+    <!-- LOADING -->
+
+    <div id="loading" class="loading hidden">
+
+        <div>
+            <span class="blink">></span>
+            CAPTURING SCREEN...
+        </div>
+
+        <div>
+            <span class="blink">></span>
+            GEMINI PROCESSING...
+        </div>
+
+        <div id="loadingModel">
+            MODEL: STARTING
+        </div>
+
+    </div>
+
+
+    <!-- ERROR -->
+
+    <div
+        id="error"
+        class="error hidden"
+    ></div>
+
+
+    <!-- RESULT -->
+
+    <div
+        id="result"
+        class="hidden"
+    >
+
+        <div class="resultPanel">
+
+            <div class="label">
+                QUESTION
+            </div>
+
+            <div id="question"></div>
+
+        </div>
+
+
+        <div class="resultPanel answerPanel">
+
+            <div class="label">
+                ANSWER
+            </div>
+
+            <div id="answer"></div>
+
+            <button id="copy">
+                [ COPY ANSWER ]
+            </button>
+
+        </div>
+
+
+        <div class="resultPanel">
+
+            <div class="label">
+                WORKING
+            </div>
+
+            <div id="steps"></div>
+
+        </div>
+
+
+        <div class="resultPanel">
+
+            <div class="label">
+                HINT
+            </div>
+
+            <div id="hint"></div>
+
+        </div>
+
+    </div>
+
+
+    <div class="footer">
+
+        SPARX AI //
+        TEMPORARY SCREEN ANALYSIS
+
+    </div>
+
+
+    <script src="popup.js"></script>
+
+</body>
+
+</html>
