@@ -1,18 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Sparx AI",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "AI maths study assistant powered by Gemini.",
-  "permissions": [
-    "activeTab",
-    "tabs",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
-  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Sparx AI"
+    "default_title": "Sparx AI",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }

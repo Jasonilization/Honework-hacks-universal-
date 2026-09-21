@@ -1,3 +1,16 @@
+/*
+ * Sparx AI — popup (canonical implementation).
+ *
+ * This file was previously duplicated: two full copies of the logic were
+ * pasted on top of each other, ending in a syntax error (orphan "});")
+ * that stopped the extension from loading at all. This is the single,
+ * de-duplicated implementation, with the fixes kept from both copies:
+ *   - key sent via x-goog-api-key header (not a URL query parameter)
+ *   - model-fallback list with a single retry policy
+ *   - markdown-fence stripping when parsing the model response
+ *   - request cancellation via AbortController
+ */
+
 const apiKeyBox = document.getElementById("apiKey");
 const saveKey = document.getElementById("saveKey");
 const scan = document.getElementById("scan");
@@ -8,251 +21,129 @@ const loadingModel = document.getElementById("loadingModel");
 const result = document.getElementById("result");
 const error = document.getElementById("error");
 
-const question = document.getElementById("question");
-const answer = document.getElementById("answer");
-const steps = document.getElementById("steps");
-const hint = document.getElementById("hint");
+const questionEl = document.getElementById("question");
+const answerEl = document.getElementById("answer");
+const stepsEl = document.getElementById("steps");
+const hintEl = document.getElementById("hint");
 
 const copy = document.getElementById("copy");
 
 const dot = document.getElementById("dot");
 const statusText = document.getElementById("statusText");
 
-
-/* ================================
-   FAST MODEL ORDER
-================================ */
-
-const MODELS = [
-    "gemini-3.6-flash",
-    "gemini-2.5-flash-lite"
+/* Verified against https://ai.google.dev/gemini-api/docs/models */
+const DEFAULT_MODEL = "gemini-3.6-flash";
+const FALLBACK_MODELS = [
+  DEFAULT_MODEL,
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite"
 ];
 
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+
+let currentAbort = null;
 
 /* ================================
-   LOAD API KEY
+   API KEY
 ================================ */
 
 chrome.storage.local.get("geminiKey", (data) => {
-
-    if (data.geminiKey) {
-
-        apiKeyBox.value = data.geminiKey;
-
-        setReady();
-
-    }
-
+  if (data.geminiKey) {
+    apiKeyBox.value = data.geminiKey;
+    setReady();
+  }
 });
-
-
-/* ================================
-   SAVE API KEY
-================================ */
 
 saveKey.addEventListener("click", async () => {
+  clearError();
 
-    clearError();
+  const key = apiKeyBox.value.trim();
+  if (!key) {
+    showError("Enter your Gemini API key.");
+    return;
+  }
 
-    const key = apiKeyBox.value.trim();
-
-    if (!key) {
-
-        showError(
-            "ENTER YOUR GEMINI API KEY."
-        );
-
-        return;
-
-    }
-
-    try {
-
-        await chrome.storage.local.set({
-            geminiKey: key
-        });
-
-        setReady();
-
-        showMessage(
-            "API KEY SAVED."
-        );
-
-    } catch (err) {
-
-        showError(
-            "COULD NOT SAVE KEY: " +
-            err.message
-        );
-
-    }
-
+  try {
+    await chrome.storage.local.set({ geminiKey: key });
+    setReady();
+    showMessage("API key saved.");
+  } catch (err) {
+    showError("Could not save key: " + err.message);
+  }
 });
-
 
 /* ================================
    SCAN SCREEN
 ================================ */
 
 scan.addEventListener("click", async () => {
+  clearError();
+  result.classList.add("hidden");
 
-    clearError();
+  if (scan.disabled) return;
 
-    result.classList.add("hidden");
+  const data = await chrome.storage.local.get("geminiKey");
+  const key = data.geminiKey;
+  if (!key) {
+    showError("Save your Gemini API key first.");
+    return;
+  }
 
-    const data =
-        await chrome.storage.local.get(
-            "geminiKey"
-        );
+  const abort = new AbortController();
+  currentAbort = abort;
 
-    const key = data.geminiKey;
+  scan.disabled = true;
+  loading.classList.remove("hidden");
+  const startTime = performance.now();
 
-    if (!key) {
+  try {
+    setStatus("CAPTURING");
+    loadingModel.textContent = "SCREENSHOT...";
 
-        showError(
-            "SAVE YOUR GEMINI API KEY FIRST."
-        );
+    const screenshot = await chrome.tabs.captureVisibleTab(null, {
+      format: "jpeg",
+      /* Small text must stay readable for the model. */
+      quality: 85
+    });
 
-        return;
+    if (!screenshot) throw new Error("Screenshot failed.");
 
+    setStatus("ANALYZING");
+
+    const resultData = await askGemini(key, screenshot, abort.signal);
+    displayResult(resultData);
+
+    const elapsed = Math.round(performance.now() - startTime);
+    setStatus("DONE " + elapsed + "ms");
+  } catch (err) {
+    if (abort.signal.aborted) {
+      setStatus("CANCELLED");
+    } else {
+      console.error("Sparx AI:", err);
+      showError(err.message || "Unknown error.");
+      setStatus("ERROR");
     }
-
-
-    scan.disabled = true;
-
-    loading.classList.remove("hidden");
-
-    const startTime =
-        performance.now();
-
-
-    try {
-
-        setStatus("CAPTURING");
-
-        loadingModel.textContent =
-            "SCREENSHOT...";
-
-
-        /*
-         * Capture current visible tab.
-         *
-         * JPEG is considerably smaller than PNG,
-         * making the upload faster.
-         */
-
-        const screenshot =
-            await chrome.tabs.captureVisibleTab(
-                null,
-                {
-                    format: "jpeg",
-                    quality: 55
-                }
-            );
-
-
-        if (!screenshot) {
-
-            throw new Error(
-                "SCREENSHOT FAILED."
-            );
-
-        }
-
-
-        setStatus("ANALYZING");
-
-
-        const resultData =
-            await askGemini(
-                key,
-                screenshot
-            );
-
-
-        displayResult(
-            resultData
-        );
-
-
-        const elapsed =
-            Math.round(
-                performance.now() -
-                startTime
-            );
-
-
-        setStatus(
-            "DONE " +
-            elapsed +
-            "ms"
-        );
-
-
-    } catch (err) {
-
-        console.error(
-            "SPARX AI:",
-            err
-        );
-
-        showError(
-            err.message ||
-            "UNKNOWN ERROR."
-        );
-
-        setStatus("ERROR");
-
-    } finally {
-
-        /*
-         * Remove the screenshot reference.
-         */
-        loading.classList.add(
-            "hidden"
-        );
-
-        scan.disabled = false;
-
-    }
-
+  } finally {
+    currentAbort = null;
+    loading.classList.add("hidden");
+    scan.disabled = false;
+  }
 });
 
-
 /* ================================
-   GEMINI
+   GEMINI REQUEST (single policy)
 ================================ */
 
-async function askGemini(
-    key,
-    screenshot
-) {
+async function askGemini(key, screenshot, signal) {
+  const comma = screenshot.indexOf(",");
+  if (comma === -1) throw new Error("Invalid screenshot.");
+  const base64 = screenshot.substring(comma + 1);
 
-    const comma =
-        screenshot.indexOf(",");
-
-    if (comma === -1) {
-
-        throw new Error(
-            "INVALID SCREENSHOT."
-        );
-
-    }
-
-
-    const base64 =
-        screenshot.substring(
-            comma + 1
-        );
-
-
-    const prompt = `
+  const prompt = `
 You are a fast educational mathematics tutor.
 
 Read the supplied screenshot carefully.
-
 Find the visible mathematics question.
-
 Solve it accurately.
 
 Return ONLY valid JSON:
@@ -274,1198 +165,203 @@ Rules:
 - Use only JSON.
 `;
 
+  let lastError = null;
 
-    let lastError = null;
+  for (let i = 0; i < FALLBACK_MODELS.length; i++) {
+    const model = FALLBACK_MODELS[i];
+    loadingModel.textContent = "MODEL: " + model;
 
+    /* One retry per model for rate limits / transient server errors,
+     * then move on to the next model. */
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (attempt > 0) await sleep(800);
 
-    /*
-     * Try the primary model first.
-     * If it fails, immediately try the fallback.
-     *
-     * No artificial sleep.
-     */
-
-    for (
-        let i = 0;
-        i < MODELS.length;
-        i++
-    ) {
-
-        const model =
-            MODELS[i];
-
-
-        loadingModel.textContent =
-            "MODEL: " +
-            model;
-
-
-        try {
-
-            const url =
-                "https://generativelanguage.googleapis.com/v1beta/models/" +
-                model +
-                ":generateContent?key=" +
-                encodeURIComponent(key);
-
-
-            const response =
-                await fetch(
-                    url,
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/" +
+            model +
+            ":generateContent",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              /* The key belongs in a header, never in the URL. */
+              "x-goog-api-key": key
+            },
+            signal,
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
                     {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body: JSON.stringify({
-
-                            contents: [
-                                {
-                                    parts: [
-
-                                        {
-                                            text: prompt
-                                        },
-
-                                        {
-                                            inline_data: {
-                                                mime_type:
-                                                    "image/jpeg",
-                                                data:
-                                                    base64
-                                            }
-                                        }
-
-                                    ]
-                                }
-                            ],
-
-                            generationConfig: {
-
-                                temperature: 0,
-
-                                responseMimeType:
-                                    "application/json"
-
-                            }
-
-                        })
-
+                      inline_data: {
+                        mime_type: "image/jpeg",
+                        data: base64
+                      }
                     }
-                );
-
-
-            const raw =
-                await response.text();
-
-
-            let data;
-
-            try {
-
-                data =
-                    JSON.parse(raw);
-
-            } catch {
-
-                throw new Error(
-                    "GEMINI RETURNED INVALID DATA."
-                );
-
-            }
-
-
-            /*
-             * HTTP error.
-             */
-
-            if (!response.ok) {
-
-                const message =
-                    data?.error?.message ||
-                    `HTTP ${response.status}`;
-
-                lastError =
-                    new Error(
-                        `Gemini ${response.status}: ${message}`
-                    );
-
-
-                /*
-                 * Only fallback for errors
-                 * where another model could help.
-                 */
-
-                if (
-                    response.status === 404 ||
-                    response.status === 429 ||
-                    response.status === 500 ||
-                    response.status === 502 ||
-                    response.status === 503 ||
-                    response.status === 504
-                ) {
-
-                    continue;
-
+                  ]
                 }
+              ],
+              generationConfig: {
+                temperature: 0.1,
+                responseMimeType: "application/json"
+              }
+            })
+          }
+        );
 
+        const raw = await response.text();
 
-                throw lastError;
+        if (!response.ok) {
+          let message = "HTTP " + response.status;
+          try {
+            message = JSON.parse(raw)?.error?.message || message;
+          } catch {
+            /* keep generic message */
+          }
 
-            }
+          lastError = new Error(
+            "Gemini " + response.status + ": " + message
+          );
 
+          /* Unknown model — fall through to the next one immediately. */
+          if (response.status === 404) break;
 
-            /*
-             * Extract all returned text parts.
-             */
+          if (RETRYABLE.has(response.status)) continue;
 
-            const parts =
-                data
-                    ?.candidates?.[0]
-                    ?.content?.parts;
-
-
-            if (
-                !Array.isArray(parts)
-            ) {
-
-                throw new Error(
-                    "GEMINI RETURNED NO CONTENT."
-                );
-
-            }
-
-
-            const text =
-                parts
-                    .map(
-                        p =>
-                            p?.text || ""
-                    )
-                    .join("")
-                    .trim();
-
-
-            if (!text) {
-
-                throw new Error(
-                    "GEMINI RETURNED AN EMPTY ANSWER."
-                );
-
-            }
-
-
-            /*
-             * Parse JSON.
-             */
-
-            return parseGeminiJSON(
-                text
-            );
-
-        } catch (err) {
-
-            console.warn(
-                model +
-                " failed:",
-                err
-            );
-
-            lastError = err;
-
+          throw lastError;
         }
 
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error("Gemini returned invalid data.");
+        }
+
+        const parts = data?.candidates?.[0]?.content?.parts;
+        if (!Array.isArray(parts)) {
+          throw new Error("Gemini returned no content.");
+        }
+
+        const text = parts.map((p) => p?.text || "").join("").trim();
+        if (!text) throw new Error("Gemini returned an empty answer.");
+
+        return parseGeminiJSON(text);
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        lastError = err;
+        console.warn(model + " attempt failed:", err);
+      }
     }
+  }
 
-
-    throw (
-        lastError ||
-        new Error(
-            "ALL GEMINI MODELS FAILED."
-        )
-    );
-
+  throw lastError || new Error("All Gemini models failed.");
 }
 
-
 /* ================================
-   JSON PARSER
+   JSON PARSER (with fence stripping)
 ================================ */
 
 function parseGeminiJSON(text) {
+  let cleaned = text.trim();
 
-    let cleaned =
-        text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?/i, "")
+      .replace(/```$/, "")
+      .trim();
+  }
 
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
 
-    /*
-     * Remove markdown fences if Gemini
-     * accidentally adds them.
-     */
-
-    if (
-        cleaned.startsWith("```")
-    ) {
-
-        cleaned =
-            cleaned.replace(
-                /^```(?:json)?/i,
-                ""
-            );
-
-        cleaned =
-            cleaned.replace(
-                /```$/,
-                ""
-            );
-
-        cleaned =
-            cleaned.trim();
-
+    if (first !== -1 && last > first) {
+      try {
+        return JSON.parse(cleaned.substring(first, last + 1));
+      } catch {
+        /* fall through */
+      }
     }
 
-
-    try {
-
-        return JSON.parse(
-            cleaned
-        );
-
-    } catch {
-
-        /*
-         * Try finding the JSON object
-         * inside the response.
-         */
-
-        const first =
-            cleaned.indexOf("{");
-
-        const last =
-            cleaned.lastIndexOf("}");
-
-
-        if (
-            first !== -1 &&
-            last !== -1 &&
-            last > first
-        ) {
-
-            const possibleJSON =
-                cleaned.substring(
-                    first,
-                    last + 1
-                );
-
-
-            try {
-
-                return JSON.parse(
-                    possibleJSON
-                );
-
-            } catch {
-
-                throw new Error(
-                    "GEMINI RETURNED INVALID JSON."
-                );
-
-            }
-
-        }
-
-
-        throw new Error(
-            "GEMINI RETURNED INVALID JSON."
-        );
-
-    }
-
+    throw new Error("Gemini returned invalid JSON.");
+  }
 }
-
 
 /* ================================
    DISPLAY
 ================================ */
 
 function displayResult(data) {
+  questionEl.textContent = data?.question || "Question not detected.";
+  answerEl.textContent = data?.answer || "No answer returned.";
 
-    question.textContent =
-        data?.question ||
-        "Question not detected.";
+  if (Array.isArray(data?.steps) && data.steps.length) {
+    stepsEl.textContent = data.steps
+      .map((step, index) => index + 1 + ". " + step)
+      .join("\n");
+  } else {
+    stepsEl.textContent = "No working returned.";
+  }
 
-
-    answer.textContent =
-        data?.answer ||
-        "No answer returned.";
-
-
-    if (
-        Array.isArray(
-            data?.steps
-        )
-    ) {
-
-        steps.textContent =
-            data.steps
-                .map(
-                    (step, index) =>
-                        `${index + 1}. ${step}`
-                )
-                .join("\n");
-
-    } else {
-
-        steps.textContent =
-            "No working returned.";
-
-    }
-
-
-    hint.textContent =
-        data?.hint ||
-        "No hint returned.";
-
-
-    result.classList.remove(
-        "hidden"
-    );
-
+  hintEl.textContent = data?.hint || "No hint returned.";
+  result.classList.remove("hidden");
 }
-
 
 /* ================================
    COPY
 ================================ */
 
-copy.addEventListener(
-    "click",
-    async () => {
+copy.addEventListener("click", async () => {
+  const text = answerEl.textContent.trim();
+  if (!text || text === "No answer returned.") return;
 
-        const text =
-            answer.textContent.trim();
-
-
-        if (
-            !text ||
-            text ===
-            "No answer returned."
-        ) {
-
-            return;
-
-        }
-
-
-        try {
-
-            await navigator.clipboard.writeText(
-                text
-            );
-
-
-            copy.textContent =
-                "[ COPIED ]";
-
-
-            setTimeout(
-                () => {
-
-                    copy.textContent =
-                        "[ COPY ANSWER ]";
-
-                },
-                1000
-            );
-
-        } catch {
-
-            showError(
-                "COPY FAILED."
-            );
-
-        }
-
-    }
-);
-
+  try {
+    await navigator.clipboard.writeText(text);
+    copy.textContent = "[ COPIED ]";
+    setTimeout(() => {
+      copy.textContent = "[ COPY ANSWER ]";
+    }, 1000);
+  } catch {
+    showError("Copy failed.");
+  }
+});
 
 /* ================================
-   UI
+   UI HELPERS
 ================================ */
 
 function setReady() {
-
-    dot.style.background =
-        "#00ff88";
-
-    statusText.textContent =
-        "READY";
-
+  dot.style.background = "#00ff88";
+  statusText.textContent = "READY";
 }
-
 
 function setStatus(text) {
-
-    statusText.textContent =
-        text;
-
+  statusText.textContent = text;
 }
-
 
 function showError(message) {
-
-    error.textContent =
-        message;
-
-    error.style.color =
-        "#ff5555";
-
-    error.style.borderColor =
-        "#ff3333";
-
-    error.classList.remove(
-        "hidden"
-    );
-
+  error.textContent = message;
+  error.style.color = "#ff5555";
+  error.style.borderColor = "#ff3333";
+  error.classList.remove("hidden");
 }
-
 
 function showMessage(message) {
-
-    error.textContent =
-        message;
-
-    error.style.color =
-        "#00ff88";
-
-    error.style.borderColor =
-        "#00ff88";
-
-    error.classList.remove(
-        "hidden"
-    );
-
+  error.textContent = message;
+  error.style.color = "#00ff88";
+  error.style.borderColor = "#00ff88";
+  error.classList.remove("hidden");
 }
-
 
 function clearError() {
-
-    error.classList.add(
-        "hidden"
-    );
-
+  error.classList.add("hidden");
 }
-        setReady();
-
-        showMessage(
-            "GEMINI API KEY SAVED."
-        );
-
-    }
-);
-
-
-// ==================================================
-// SCREEN SCAN
-// ==================================================
-
-scan.addEventListener(
-    "click",
-    async function () {
-
-        clearMessages();
-
-        result.classList.add(
-            "hidden"
-        );
-
-        const stored =
-            await chrome.storage.local.get(
-                ["geminiKey"]
-            );
-
-        const key =
-            stored.geminiKey;
-
-        if (!key) {
-
-            showError(
-                "SAVE YOUR GEMINI API KEY FIRST."
-            );
-
-            return;
-
-        }
-
-        scan.disabled = true;
-
-        loading.classList.remove(
-            "hidden"
-        );
-
-        let screenshot = null;
-
-        try {
-
-            setStatus(
-                "CAPTURING"
-            );
-
-            /*
-             * Capture only the visible
-             * portion of the current tab.
-             */
-
-            screenshot =
-                await chrome.tabs.captureVisibleTab(
-                    null,
-                    {
-                        format: "jpeg",
-                        quality: 70
-                    }
-                );
-
-
-            setStatus(
-                "ANALYZING"
-            );
-
-
-            /*
-             * Send screenshot to Gemini.
-             */
-
-            const data =
-                await askGemini(
-                    key,
-                    screenshot
-                );
-
-
-            /*
-             * Display result.
-             */
-
-            displayResult(
-                data
-            );
-
-
-            setStatus(
-                "COMPLETE"
-            );
-
-        } catch (err) {
-
-            showError(
-                "ERROR: " +
-                err.message
-            );
-
-            setStatus(
-                "ERROR"
-            );
-
-        } finally {
-
-            /*
-             * Delete our reference to
-             * the screenshot.
-
-             * It is never written to a file
-             * or chrome.storage.
-             */
-
-            screenshot = null;
-
-            loading.classList.add(
-                "hidden"
-            );
-
-            scan.disabled = false;
-
-        }
-
-    }
-);
-
-
-// ==================================================
-// GEMINI REQUEST WITH FALLBACK
-// ==================================================
-
-async function askGemini(
-    key,
-    imageData
-) {
-
-    /*
-     * Keep the screenshot in memory
-     * only for this request.
-     */
-
-    const base64 =
-        imageData.split(",")[1];
-
-
-    const prompt = `
-
-You are Sparx AI.
-
-You are an educational school maths tutor.
-
-Look carefully at the supplied screenshot.
-
-Find the visible maths question.
-
-Solve it accurately.
-
-Return ONLY valid JSON in exactly
-this structure:
-
-{
-  "question": "detected question",
-  "answer": "final answer",
-  "steps": [
-    "step 1",
-    "step 2",
-    "step 3"
-  ],
-  "hint": "short useful hint"
-}
-
-Rules:
-
-- Carefully inspect the screenshot.
-- Do not guess unreadable information.
-- Check all arithmetic.
-- Explain the mathematics clearly.
-- Keep explanations appropriate for a school student.
-- If there is no maths question visible,
-  say that in the question field.
-- Do not include markdown.
-- Return valid JSON only.
-
-`;
-
-
-    let lastError = null;
-
-
-    /*
-     * Try each model.
-     */
-
-    for (
-        let modelIndex = 0;
-        modelIndex < MODELS.length;
-        modelIndex++
-    ) {
-
-        const model =
-            MODELS[modelIndex];
-
-
-        /*
-         * Three attempts per model.
-         */
-
-        for (
-            let attempt = 0;
-            attempt < 3;
-            attempt++
-        ) {
-
-            try {
-
-                loadingModel.textContent =
-                    "MODEL: " +
-                    model +
-                    " // TRY " +
-                    (attempt + 1);
-
-
-                /*
-                 * Exponential backoff.
-
-                 * Attempt 1:
-                 * no wait
-
-                 * Attempt 2:
-                 * ~1 second
-
-                 * Attempt 3:
-                 * ~2 seconds
-                 */
-
-                if (attempt > 0) {
-
-                    const wait =
-                        Math.pow(
-                            2,
-                            attempt - 1
-                        ) * 1000;
-
-                    await sleep(
-                        wait
-                    );
-
-                }
-
-
-                const url =
-                    "https://generativelanguage.googleapis.com/v1beta/models/" +
-                    model +
-                    ":generateContent?key=" +
-                    encodeURIComponent(
-                        key
-                    );
-
-
-                const response =
-                    await fetch(
-                        url,
-                        {
-
-                            method:
-                                "POST",
-
-                            headers: {
-
-                                "Content-Type":
-                                    "application/json"
-
-                            },
-
-                            body:
-                                JSON.stringify({
-
-                                    contents: [
-
-                                        {
-
-                                            parts: [
-
-                                                {
-
-                                                    text:
-                                                        prompt
-
-                                                },
-
-                                                {
-
-                                                    inline_data: {
-
-                                                        mime_type:
-                                                            "image/jpeg",
-
-                                                        data:
-                                                            base64
-
-                                                    }
-
-                                                }
-
-                                            ]
-
-                                        }
-
-                                    ],
-
-                                    generationConfig: {
-
-                                        temperature:
-                                            0.1,
-
-                                        responseMimeType:
-                                            "application/json"
-
-                                    }
-
-                                })
-
-                        }
-                    );
-
-
-                /*
-                 * SUCCESS
-                 */
-
-                if (response.ok) {
-
-                    const data =
-                        await response.json();
-
-
-                    const text =
-                        data
-                            ?.candidates?.[0]
-                            ?.content?.parts?.[0]
-                            ?.text;
-
-
-                    if (!text) {
-
-                        throw new Error(
-                            "Gemini returned an empty response."
-                        );
-
-                    }
-
-
-                    let parsed;
-
-                    try {
-
-                        parsed =
-                            JSON.parse(
-                                text
-                            );
-
-                    } catch {
-
-                        throw new Error(
-                            "Gemini returned invalid JSON."
-                        );
-
-                    }
-
-
-                    return parsed;
-
-                }
-
-
-                /*
-                 * ERROR
-                 */
-
-                const raw =
-                    await response.text();
-
-
-                let message =
-                    "HTTP " +
-                    response.status;
-
-
-                try {
-
-                    const json =
-                        JSON.parse(
-                            raw
-                        );
-
-                    message =
-                        json
-                            ?.error
-                            ?.message ||
-                        message;
-
-                } catch {
-
-                    // Keep original message.
-
-                }
-
-
-                lastError =
-                    new Error(
-                        "HTTP " +
-                        response.status +
-                        ": " +
-                        message
-                    );
-
-
-                /*
-                 * Retry temporary errors.
-
-                 * 429 = rate limit
-                 * 500 = server error
-                 * 502 = gateway
-                 * 503 = unavailable
-                 * 504 = timeout
-                 */
-
-                const temporary =
-                    [
-
-                        429,
-                        500,
-                        502,
-                        503,
-                        504
-
-                    ].includes(
-                        response.status
-                    );
-
-
-                if (!temporary) {
-
-                    throw lastError;
-
-                }
-
-
-            } catch (err) {
-
-                lastError =
-                    err;
-
-
-                /*
-                 * If this is the final attempt
-                 * of the final model, stop.
-                 */
-
-                const finalAttempt =
-                    modelIndex ===
-                        MODELS.length - 1 &&
-                    attempt === 2;
-
-
-                if (finalAttempt) {
-
-                    throw lastError;
-
-                }
-
-            }
-
-        }
-
-
-        /*
-         * Current model failed.
-
-         * Move to next model.
-         */
-
-        if (
-            modelIndex <
-            MODELS.length - 1
-        ) {
-
-            setStatus(
-                "FALLBACK"
-            );
-
-        }
-
-    }
-
-
-    throw (
-        lastError ||
-        new Error(
-            "ALL GEMINI MODELS FAILED."
-        )
-    );
-
-}
-
-
-// ==================================================
-// DISPLAY RESULT
-// ==================================================
-
-function displayResult(
-    data
-) {
-
-    question.textContent =
-        data.question ||
-        "Question not detected.";
-
-
-    answer.textContent =
-        data.answer ||
-        "No answer returned.";
-
-
-    if (
-        Array.isArray(
-            data.steps
-        )
-    ) {
-
-        steps.textContent =
-            data.steps
-                .map(
-                    function (
-                        step,
-                        index
-                    ) {
-
-                        return (
-                            (index + 1) +
-                            ". " +
-                            step
-                        );
-
-                    }
-                )
-                .join("\n");
-
-    } else {
-
-        steps.textContent =
-            "No working returned.";
-
-    }
-
-
-    hint.textContent =
-        data.hint ||
-        "No hint returned.";
-
-
-    result.classList.remove(
-        "hidden"
-    );
-
-}
-
-
-// ==================================================
-// COPY ANSWER
-// ==================================================
-
-copy.addEventListener(
-    "click",
-    async function () {
-
-        const text =
-            answer.textContent;
-
-
-        if (
-            !text ||
-            text ===
-                "No answer returned."
-        ) {
-
-            return;
-
-        }
-
-
-        await navigator.clipboard.writeText(
-            text
-        );
-
-
-        copy.textContent =
-            "[ COPIED ]";
-
-
-        setTimeout(
-            function () {
-
-                copy.textContent =
-                    "[ COPY ANSWER ]";
-
-            },
-            1200
-        );
-
-    }
-);
-
-
-// ==================================================
-// HELPERS
-// ==================================================
 
 function sleep(ms) {
-
-    return new Promise(
-        function (resolve) {
-
-            setTimeout(
-                resolve,
-                ms
-            );
-
-        }
-    );
-
-}
-
-
-function setReady() {
-
-    dot.style.background =
-        "#00ff88";
-
-    statusText.textContent =
-        "READY";
-
-}
-
-
-function setStatus(
-    text
-) {
-
-    statusText.textContent =
-        text;
-
-}
-
-
-function showError(
-    message
-) {
-
-    error.textContent =
-        message;
-
-    error.style.color =
-        "#ff5555";
-
-    error.style.borderColor =
-        "#ff3333";
-
-    error.classList.remove(
-        "hidden"
-    );
-
-}
-
-
-function showMessage(
-    message
-) {
-
-    error.textContent =
-        message;
-
-    error.style.color =
-        "#00ff88";
-
-    error.style.borderColor =
-        "#00ff88";
-
-    error.classList.remove(
-        "hidden"
-    );
-
-}
-
-
-function clearMessages() {
-
-    error.classList.add(
-        "hidden"
-    );
-
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
