@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Sparx AI",
+  "name": "Sparxer",
   "version": "5.0.0",
-  "description": "AI maths study assistant powered by Gemini.",
+  "description": "AI maths study assistant - bring your own API key (Gemini or OpenRouter).",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -14,7 +14,7 @@
   "optional_host_permissions": ["https://openrouter.ai/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Sparx AI",
+    "default_title": "Sparxer",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

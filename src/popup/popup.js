@@ -1,5 +1,5 @@
 /*
- * Sparx AI — popup controller.
+ * Sparxer — popup controller.
  * Owns nothing but presentation: analysis goes through engine.js,
  * persistence through src/storage, providers through src/providers.
  */
