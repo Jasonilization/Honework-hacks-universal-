@@ -6,10 +6,11 @@
  */
 
 import { get as getSettings, set as setSettings, onChanged as onSettingsChanged } from "../storage/settings.js";
+import * as history from "../storage/history.js";
 import { listProviders, getProvider } from "../providers/registry.js";
 import { friendlyError, ERROR_KINDS } from "../core/errors.js";
 import { applyTheme, watchSystem } from "./theme.js";
-import { icons, el, fmtDuration } from "./ui.js";
+import { icons, el, fmtDuration, fmtTime } from "./ui.js";
 import * as engine from "./engine.js";
 
 const $ = (id) => document.getElementById(id);
@@ -33,10 +34,18 @@ const dom = {
   testStatus: $("testStatus"),
   themeSelect: $("themeSelect"),
   includeWorkingToggle: $("includeWorkingToggle"),
+  saveHistoryToggle: $("saveHistoryToggle"),
+  historySection: $("historySection"),
+  historyList: $("historyList"),
+  historySearch: $("historySearch"),
+  historyEmpty: $("historyEmpty"),
+  btnClearHistory: $("btnClearHistory"),
   footVersion: $("footVersion")
 };
 
 let settings = null;
+let historyEntries = [];
+let historyQuery = "";
 
 /* ================================
    INIT
@@ -54,8 +63,10 @@ async function init() {
 
   wireActions();
   wireSettings();
+  wireHistory();
 
   engine.onState(renderState);
+  loadHistory();
 }
 
 /* ================================
@@ -244,6 +255,92 @@ function timeShort(ts) {
 }
 
 /* ================================
+   HISTORY
+================================ */
+
+function wireHistory() {
+  dom.historySearch.addEventListener("input", () => {
+    historyQuery = dom.historySearch.value;
+    renderHistory();
+  });
+
+  dom.historyList.addEventListener("click", (event) => {
+    const item = event.target.closest(".history-item");
+    if (!item) return;
+
+    if (event.target.closest(".history-delete")) {
+      history.remove(item.dataset.id);
+      return;
+    }
+
+    const entry = historyEntries.find((e) => e.id === item.dataset.id);
+    if (entry) renderResult(entry);
+  });
+
+  dom.btnClearHistory.addEventListener("click", async () => {
+    if (confirm("Clear all saved questions? This can't be undone.")) {
+      await history.clear();
+    }
+  });
+
+  history.onChanged(() => loadHistory());
+}
+
+async function loadHistory() {
+  historyEntries = await history.list();
+  renderHistory();
+}
+
+function renderHistory() {
+  const visible = history.search(historyEntries, historyQuery);
+  const showSection = settings.saveHistory || historyEntries.length > 0;
+
+  dom.historySection.hidden = !showSection;
+  if (!showSection) return;
+
+  dom.btnClearHistory.hidden = historyEntries.length === 0;
+  dom.historyEmpty.hidden = visible.length > 0;
+
+  const frag = document.createDocumentFragment();
+  for (const entry of visible.slice(0, 30)) {
+    frag.append(historyItem(entry));
+  }
+  dom.historyList.replaceChildren(frag);
+}
+
+function historyItem(entry) {
+  const row = el("div", { class: "history-row" });
+  if (entry.identifier && settings.showIdentifier) {
+    row.append(el("span", { class: "chip", text: entry.identifier }));
+  }
+  row.append(el("span", { class: "history-q", text: entry.question || "(no question text)" }));
+  if (entry.answer) {
+    row.append(el("span", { class: "history-a", text: entry.answer }));
+  }
+
+  const meta = el("div", { class: "history-meta" });
+  if (entry.model) meta.append(el("span", { text: entry.model }));
+  if (entry.site) meta.append(el("span", { text: entry.site }));
+  meta.append(el("span", { text: fmtTime(entry.timestampMs) }));
+
+  return el("li", { class: "history-item", "data-id": entry.id },
+    el("button", {
+      class: "history-open",
+      type: "button",
+      title: "Open this result",
+      onclick: () => renderResult(entry)
+    }, row, meta),
+    el("button", {
+      class: "icon-btn history-delete",
+      type: "button",
+      title: "Delete this entry",
+      "aria-label": "Delete from history",
+      html: icons.x
+    })
+  );
+}
+
+/* ================================
    SETTINGS
 ================================ */
 
@@ -299,19 +396,27 @@ function wireSettings() {
     applyTheme(settings.theme);
   });
 
-  /* include working */
+  /* include working + history saving */
   dom.includeWorkingToggle.checked = settings.includeWorking;
   dom.includeWorkingToggle.addEventListener("change", async () => {
     settings = await setSettings({ includeWorking: dom.includeWorkingToggle.checked });
   });
 
+  dom.saveHistoryToggle.checked = settings.saveHistory;
+  dom.saveHistoryToggle.addEventListener("change", async () => {
+    settings = await setSettings({ saveHistory: dom.saveHistoryToggle.checked });
+    renderHistory();
+  });
+
   onSettingsChanged((next) => {
     settings = next;
     dom.includeWorkingToggle.checked = next.includeWorking;
+    dom.saveHistoryToggle.checked = next.saveHistory;
     if (dom.themeSelect.value !== next.theme) {
       dom.themeSelect.value = next.theme;
       applyTheme(next.theme);
     }
+    renderHistory();
     renderStatus(null);
   });
 }

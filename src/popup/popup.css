@@ -563,21 +563,25 @@ details.working[open] summary .chev {
 }
 
 .history-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  padding: 8px 10px;
   position: relative;
+  border-bottom: 1px solid var(--border);
 }
 
 .history-item:last-child {
   border-bottom: none;
 }
 
-.history-item:hover {
+.history-open {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: var(--bg);
+  padding: 8px 28px 8px 10px;
+}
+
+.history-item:hover .history-open,
+.history-item:focus-within .history-open {
   background: var(--surface);
 }
 

@@ -43,6 +43,24 @@
       </div>
       <p class="action-hint">Captures the visible tab and solves the maths question on it.</p>
 
+      <section class="history" id="historySection" aria-label="History">
+        <div class="history-head">
+          <h2 class="history-title">Recent</h2>
+          <div class="search-box">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+              stroke-width="1.4" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="m10.5 10.5 3 3" />
+            </svg>
+            <input id="historySearch" type="search" placeholder="Search history"
+              aria-label="Search history">
+          </div>
+          <button id="btnClearHistory" class="btn btn-small btn-ghost" hidden>Clear all</button>
+        </div>
+        <ul id="historyList" class="history-list" role="list"></ul>
+        <p id="historyEmpty" class="history-empty" hidden>No saved questions yet.</p>
+      </section>
+
     </main>
 
     <details id="settingsPanel" class="settings">
@@ -107,6 +125,12 @@
             <label for="includeWorkingToggle">Include working</label>
             <p class="setting-desc">Show step-by-step working under each answer.</p>
             <input type="checkbox" id="includeWorkingToggle" class="switch">
+          </div>
+
+          <div class="setting setting-toggle">
+            <label for="saveHistoryToggle">Save history</label>
+            <p class="setting-desc">Keep the last 200 questions in this browser so you can reopen them instantly.</p>
+            <input type="checkbox" id="saveHistoryToggle" class="switch">
           </div>
         </div>
 
