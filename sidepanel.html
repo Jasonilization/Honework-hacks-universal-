@@ -3,11 +3,11 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Sparxer</title>
+  <title>Sparxer — panel</title>
   <link rel="stylesheet" href="src/popup/popup.css">
 </head>
 
-<body>
+<body class="surface-panel">
   <div id="app">
 
     <header class="hdr">
@@ -20,14 +20,6 @@
           <span id="statusDot" class="status-dot"></span>
           <span id="statusText">Loading…</span>
         </span>
-        <button id="btnSidePanel" class="icon-btn" title="Open in side panel"
-          aria-label="Open in side panel" hidden>
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-            stroke-width="1.4" aria-hidden="true">
-            <rect x="1.8" y="2.5" width="12.4" height="11" rx="1.5" />
-            <path d="M10 2.5v11" />
-          </svg>
-        </button>
         <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings"
           aria-expanded="false" aria-controls="settingsPanel">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"

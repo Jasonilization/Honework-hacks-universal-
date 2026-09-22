@@ -18,6 +18,7 @@ const $ = (id) => document.getElementById(id);
 const dom = {
   status: $("status"),
   statusText: $("statusText"),
+  btnSidePanel: $("btnSidePanel"),
   btnSettings: $("btnSettings"),
   settingsPanel: $("settingsPanel"),
   detectedBar: $("detectedBar"),
@@ -101,6 +102,22 @@ function renderState(state) {
 function wireActions() {
   dom.btnAnalyze.addEventListener("click", () => run(engine.analyzeScreen));
   dom.btnCancel.addEventListener("click", () => engine.cancel().catch(() => {}));
+
+  /* Side panel (Chrome 116+): keep results visible while working through
+   * questions. The worker broadcasts to every attached surface, so the
+   * panel and the popup stay in sync. */
+  if (dom.btnSidePanel && chrome.sidePanel?.open) {
+    dom.btnSidePanel.hidden = false;
+    dom.btnSidePanel.addEventListener("click", async () => {
+      try {
+        const tab = await engine.getActiveTab();
+        if (tab) await chrome.sidePanel.open({ tabId: tab.id });
+        window.close();
+      } catch {
+        /* panel API unavailable in this browser */
+      }
+    });
+  }
 }
 
 async function run(action) {
