@@ -1,7 +1,8 @@
 /*
  * Sparxer — popup controller.
- * Owns nothing but presentation: analysis goes through engine.js,
- * persistence through src/storage, providers through src/providers.
+ * Owns nothing but presentation: the analysis runs in the background
+ * service worker (engine.js is the client), persistence lives in
+ * src/storage and providers in src/providers.
  */
 
 import { get as getSettings, set as setSettings, onChanged as onSettingsChanged } from "../storage/settings.js";
@@ -36,8 +37,6 @@ const dom = {
 };
 
 let settings = null;
-let analyzing = false;
-let lastAction = null; /* "screen" — regenerate support */
 
 /* ================================
    INIT
@@ -50,17 +49,31 @@ async function init() {
 
   applyTheme(settings.theme);
   watchSystem(() => applyTheme(settings.theme));
-  onSettingsChanged((next) => {
-    settings = next;
-    applyTheme(settings.theme);
-  });
 
   dom.footVersion.textContent = "v" + chrome.runtime.getManifest().version;
 
   wireActions();
   wireSettings();
 
-  renderStatus();
+  engine.onState(renderState);
+}
+
+/* ================================
+   WORKER STATE -> UI
+================================ */
+
+function renderState(state) {
+  renderStatus(state);
+
+  if (state.analyzing) {
+    renderLoading(state.analyzing.label);
+  } else if (state.error) {
+    renderError(state.error.message);
+  } else if (state.lastResult) {
+    renderResult(state.lastResult);
+  } else {
+    clearCard();
+  }
 }
 
 /* ================================
@@ -68,67 +81,47 @@ async function init() {
 ================================ */
 
 function wireActions() {
-  dom.btnAnalyze.addEventListener("click", () => runAnalysis("screen"));
-  dom.btnCancel.addEventListener("click", () => engine.cancel());
+  dom.btnAnalyze.addEventListener("click", () => run(engine.analyzeScreen));
+  dom.btnCancel.addEventListener("click", () => engine.cancel().catch(() => {}));
 }
 
-async function runAnalysis(action) {
-  if (analyzing) return;
-  clearCard();
-  analyzing = true;
-  lastAction = action;
-  renderStatus();
-  renderLoading("Capturing screen…");
-
+async function run(action) {
   try {
-    const result = await engine.analyzeScreen((phase) => {
-      if (phase === "analyzing") {
-        const label = getProvider(settings.provider).label;
-        renderLoading(`Waiting for ${label}…`);
-      }
-    });
-
-    analyzing = false;
-    lastResult = result;
-    renderStatus();
-    renderResult(result);
+    await action();
   } catch (err) {
-    analyzing = false;
-    renderStatus(err);
-    if (err?.kind === ERROR_KINDS.CANCELLED || err?.name === "AbortError") {
-      clearCard();
-    } else {
-      renderError(friendlyError(err));
-    }
+    renderError(friendlyError(err));
+    renderStatus({ error: { message: friendlyError(err) } });
   }
 }
-
-let lastResult = null;
 
 /* ================================
    STATUS
 ================================ */
 
-function renderStatus(error = null) {
-  const state = analyzing
+function renderStatus(state) {
+  const hasKey = !!settings[settings.provider]?.apiKey;
+  const workerError = state?.error && !state?.analyzing;
+
+  const value = state?.analyzing
     ? "analyzing"
-    : error
+    : workerError
       ? "error"
-      : settings[settings.provider]?.apiKey
+      : hasKey
         ? "ready"
         : "warn";
 
-  dom.status.dataset.state = state;
-  dom.statusText.textContent = analyzing
-    ? "Analyzing…"
-    : error
-      ? "Error"
-      : state === "ready"
-        ? "Ready"
-        : "API key needed";
+  dom.status.dataset.state = value;
+  dom.statusText.textContent =
+    value === "analyzing"
+      ? "Analyzing…"
+      : value === "error"
+        ? "Error"
+        : value === "ready"
+          ? "Ready"
+          : "API key needed";
 
-  dom.btnCancel.hidden = !analyzing;
-  dom.btnAnalyze.disabled = analyzing;
+  dom.btnCancel.hidden = !state?.analyzing;
+  dom.btnAnalyze.disabled = !!state?.analyzing;
 }
 
 /* ================================
@@ -146,7 +139,7 @@ function renderLoading(label) {
   dom.resultCard.append(
     el("div", { class: "loading-status" },
       el("span", { class: "spinner", "aria-hidden": "true" }),
-      el("span", { id: "loadingLabel", text: label })
+      el("span", { id: "loadingLabel", text: label ? `Waiting for ${label}…` : "Analyzing…" })
     ),
     el("div", { class: "skeleton" }),
     el("div", { class: "skeleton", style: "width: 60%" }),
@@ -192,7 +185,7 @@ function renderResult(result) {
     el("button", {
       class: "btn btn-small",
       html: icons.retry + " Retry",
-      onclick: () => runAnalysis(lastAction || "screen")
+      onclick: () => run(engine.retry)
     })
   );
   card.append(actions);
@@ -228,7 +221,7 @@ function renderError(message) {
     el("button", {
       class: "btn btn-small",
       html: icons.retry + " Try again",
-      onclick: () => runAnalysis(lastAction || "screen")
+      onclick: () => run(engine.retry)
     })
   );
 }
@@ -319,6 +312,7 @@ function wireSettings() {
       dom.themeSelect.value = next.theme;
       applyTheme(next.theme);
     }
+    renderStatus(null);
   });
 }
 
@@ -331,7 +325,7 @@ async function saveProvider(patch) {
   settings = await setSettings({
     [providerId]: { ...currentProviderSettings(), ...patch }
   });
-  renderStatus();
+  renderStatus(null);
 }
 
 function populateModels() {
@@ -380,7 +374,7 @@ async function switchProvider(providerId) {
   settings = await setSettings({ provider: providerId });
   populateModels();
   loadProviderFields();
-  renderStatus();
+  renderStatus(null);
 }
 
 async function testConnection() {

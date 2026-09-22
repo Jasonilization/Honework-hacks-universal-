@@ -12,6 +12,10 @@
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://generativelanguage.googleapis.com/*"],
   "optional_host_permissions": ["https://openrouter.ai/*"],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Sparxer",
