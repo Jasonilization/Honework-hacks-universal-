@@ -150,7 +150,54 @@ function renderDetected(state) {
   const detected = state?.detected;
   dom.detectedBar.replaceChildren();
 
-  if (!detected || state?.lastResult?.hash === detected.hash) {
+  if (!detected) {
+    dom.detectedBar.hidden = true;
+    return;
+  }
+
+  /* Bookwork check — answer straight from history, no AI call. */
+  const bookwork = detected.bookworkCheck;
+  if (bookwork) {
+    dom.detectedBar.hidden = false;
+    dom.detectedBar.append(el("span", { class: "chip", text: bookwork.identifier }));
+
+    if (bookwork.entry) {
+      dom.detectedBar.append(
+        el("span", { class: "detected-text" },
+          "Bookwork check — your answer for " + bookwork.identifier + ": ",
+          el("span", { class: "detected-answer", text: bookwork.entry.answer || "" })
+        ),
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: "Copy",
+          onclick: (ev) => copyAnswer(bookwork.entry.answer, ev.currentTarget)
+        }),
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: "Open",
+          onclick: () => renderResult(bookwork.entry)
+        })
+      );
+    } else {
+      dom.detectedBar.append(
+        el("span", {
+          class: "detected-text",
+          text: `Bookwork check for ${bookwork.identifier} — no saved answer in history.`
+        }),
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: "Search history",
+          onclick: () => searchHistoryFor(bookwork.identifier)
+        })
+      );
+    }
+    return;
+  }
+
+  if (state?.lastResult?.hash === detected.hash) {
     dom.detectedBar.hidden = true;
     return;
   }
@@ -170,6 +217,14 @@ function renderDetected(state) {
       onclick: () => run(() => engine.analyzeDetected(detected))
     })
   );
+}
+
+function searchHistoryFor(code) {
+  dom.settingsPanel.open = false;
+  dom.historySearch.value = code;
+  historyQuery = code;
+  renderHistory();
+  dom.historySearch.focus();
 }
 
 /* ================================
@@ -305,13 +360,22 @@ function wireHistory() {
     const item = event.target.closest(".history-item");
     if (!item) return;
 
+    const entry = historyEntries.find((e) => e.id === item.dataset.id);
+    if (!entry) return;
+
     if (event.target.closest(".history-delete")) {
-      history.remove(item.dataset.id);
+      history.remove(entry.id);
       return;
     }
 
-    const entry = historyEntries.find((e) => e.id === item.dataset.id);
-    if (entry) renderResult(entry);
+    if (event.target.closest(".history-copy")) {
+      copyAnswer(entry.answer, event.target.closest("button"));
+      return;
+    }
+
+    if (event.target.closest(".history-open")) {
+      renderResult(entry);
+    }
   });
 
   dom.btnClearHistory.addEventListener("click", async () => {
@@ -329,7 +393,18 @@ async function loadHistory() {
 }
 
 function renderHistory() {
-  const visible = history.search(historyEntries, historyQuery);
+  let visible = history.search(historyEntries, historyQuery);
+
+  /* Typing a bookwork code should surface that entry first. */
+  const compact = historyQuery.trim().toLowerCase().replace(/\s+/g, "");
+  if (compact) {
+    visible = [...visible].sort((a, b) => {
+      const aExact = a.identifier?.toLowerCase().replace(/\s+/g, "") === compact ? 1 : 0;
+      const bExact = b.identifier?.toLowerCase().replace(/\s+/g, "") === compact ? 1 : 0;
+      return bExact - aExact;
+    });
+  }
+
   const showSection = settings.saveHistory || historyEntries.length > 0;
 
   dom.historySection.hidden = !showSection;
@@ -364,9 +439,16 @@ function historyItem(entry) {
     el("button", {
       class: "history-open",
       type: "button",
-      title: "Open this result",
-      onclick: () => renderResult(entry)
+      title: "Open this result"
     }, row, meta),
+    el("button", {
+      class: "icon-btn history-copy",
+      type: "button",
+      title: "Copy answer",
+      "aria-label": "Copy answer",
+      html: icons.copy,
+      disabled: !entry.answer
+    }),
     el("button", {
       class: "icon-btn history-delete",
       type: "button",

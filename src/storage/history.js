@@ -35,12 +35,16 @@ export async function add(entry) {
 export function search(entries, query) {
   const q = String(query || "").trim().toLowerCase();
   if (!q) return entries;
-  return entries.filter((e) =>
-    [e.question, e.answer, e.identifier, e.model, e.site]
+  const compact = q.replace(/\s+/g, "");
+
+  return entries.filter((e) => {
+    const identifier = String(e.identifier || "").toLowerCase().replace(/\s+/g, "");
+    if (identifier && identifier === compact) return true;
+    return [e.question, e.answer, e.model, e.site]
       .join(" ")
       .toLowerCase()
-      .includes(q)
-  );
+      .includes(q);
+  });
 }
 
 export async function remove(id) {
@@ -56,6 +60,16 @@ export async function findByHash(hash) {
   if (!hash) return null;
   const entries = await list();
   return entries.find((e) => e.hash === hash) || null;
+}
+
+/* Most recent entry for a bookwork code — used by bookwork checks. */
+export async function findByIdentifier(identifier) {
+  const code = String(identifier || "").trim().toUpperCase();
+  if (!code) return null;
+  const entries = await list();
+  return entries.find(
+    (e) => String(e.identifier || "").trim().toUpperCase() === code
+  ) || null;
 }
 
 export function onChanged(listener) {

@@ -44,3 +44,24 @@ export function extractIdentifier(text) {
   }
   return "";
 }
+
+/*
+ * Sparx bookwork checks: the page shows a code from a question answered
+ * earlier and asks what the answer was. The original question is NOT
+ * shown, so an AI request is useless — the right response is looking up
+ * the stored answer by code. Recognizes check screens by the phrase
+ * "bookwork check" plus the code it references.
+ */
+const BOOKWORK_CHECK_PHRASE = /\bbookwork\s*check\b/i;
+
+export function extractBookworkCheck(text) {
+  const source = String(text || "");
+  if (!BOOKWORK_CHECK_PHRASE.test(source)) return "";
+
+  const anchored = extractIdentifier(source);
+  if (anchored) return anchored;
+
+  /* On a check screen a bare code is safe to read as the reference. */
+  const bare = source.match(/\b(\d{1,2}[A-Z])\b/);
+  return bare ? bare[1].toUpperCase() : "";
+}

@@ -8,7 +8,7 @@
 import { get as getSettings, set as setSettings } from "../storage/settings.js";
 import { getProvider } from "../providers/registry.js";
 import { friendlyError } from "../core/errors.js";
-import { questionFingerprint } from "../core/normalize.js";
+import { questionFingerprint, extractBookworkCheck } from "../core/normalize.js";
 import * as history from "../storage/history.js";
 
 /* ---------------- state ---------------- */
@@ -155,6 +155,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         state.detected = { ...question, hash: message.hash, at: Date.now() };
         broadcastState();
+
+        /* Sparx bookwork check: the page only shows a code and asks what
+         * the answer was. The stored history IS the right answer — never
+         * waste an AI request on a check screen. */
+        const checkCode = extractBookworkCheck(question.text);
+        if (checkCode) {
+          const entry = await history.findByIdentifier(checkCode);
+          state.detected = {
+            ...question,
+            hash: message.hash,
+            at: Date.now(),
+            bookworkCheck: { identifier: checkCode, entry }
+          };
+          broadcastState();
+          sendResponse({ ok: true });
+          return;
+        }
 
         if (settings.autoAnalyze && settings[settings.provider]?.apiKey) {
           const seenAt = recentHashes.get(message.hash);

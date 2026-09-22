@@ -481,12 +481,14 @@ details.working[open] summary .chev {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   padding: 8px 10px;
   margin-bottom: 12px;
   font-size: 12px;
+  animation: rise 140ms ease-out;
 }
 
 .detected-bar .chip {
@@ -499,6 +501,13 @@ details.working[open] summary .chev {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.detected-bar .detected-answer {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 /* ---------- action row ---------- */
@@ -577,7 +586,7 @@ details.working[open] summary .chev {
   text-align: left;
   border: none;
   background: var(--bg);
-  padding: 8px 28px 8px 10px;
+  padding: 8px 52px 8px 10px;
 }
 
 .history-item:hover .history-open,
@@ -630,15 +639,23 @@ details.working[open] summary .chev {
   border-radius: var(--radius);
 }
 
+.history-copy,
 .history-delete {
   position: absolute;
   top: 6px;
-  right: 6px;
-  width: 22px;
-  height: 22px;
   opacity: 0;
 }
 
+.history-copy {
+  right: 30px;
+}
+
+.history-delete {
+  right: 6px;
+}
+
+.history-item:hover .history-copy,
+.history-item:focus-within .history-copy,
 .history-item:hover .history-delete,
 .history-item:focus-within .history-delete {
   opacity: 1;
