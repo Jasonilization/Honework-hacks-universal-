@@ -9,9 +9,9 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": ["https://generativelanguage.googleapis.com/*"],
-  "optional_host_permissions": ["https://openrouter.ai/*"],
+  "optional_host_permissions": ["https://openrouter.ai/*", "http://*/*", "https://*/*"],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"
@@ -25,5 +25,18 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/detector.js",
+        "src/core/normalize.js",
+        "src/sites/adapter.js",
+        "src/sites/generic.js",
+        "src/sites/sparx.js",
+        "src/sites/index.js"
+      ],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ]
 }

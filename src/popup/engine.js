@@ -60,3 +60,12 @@ export async function retry() {
 export async function cancel() {
   await chrome.runtime.sendMessage({ type: "cancel" });
 }
+
+export async function analyzeDetected(question) {
+  const response = await chrome.runtime.sendMessage({
+    type: "analyze:question",
+    question,
+    hash: question?.hash
+  });
+  if (response?.ok === false) throw new Error(response.error || "Could not start analysis.");
+}

@@ -134,6 +134,34 @@
           </div>
         </div>
 
+        <div class="setting-group">
+          <h3 class="setting-group-title">Detection</h3>
+
+          <div class="setting setting-toggle">
+            <label for="autoDetectToggle">Detect questions</label>
+            <p class="setting-desc">Master switch. Watch the sites you enable for new questions — off stops all detection immediately.</p>
+            <input type="checkbox" id="autoDetectToggle" class="switch">
+          </div>
+
+          <div class="setting setting-toggle">
+            <label for="autoAnalyzeToggle">Auto-analyze new questions</label>
+            <p class="setting-desc">Solve newly detected questions automatically. Off shows a prompt you can click to analyze.</p>
+            <input type="checkbox" id="autoAnalyzeToggle" class="switch">
+          </div>
+
+          <div class="setting setting-toggle">
+            <label for="showIdentifierToggle">Show question identifier</label>
+            <p class="setting-desc">Show codes like 4A next to questions, results and history entries.</p>
+            <input type="checkbox" id="showIdentifierToggle" class="switch">
+          </div>
+
+          <div class="setting">
+            <label id="siteToggleLabel">This site</label>
+            <button id="btnSiteToggle" class="btn btn-small">Enable detection…</button>
+            <p class="setting-desc" id="siteStatus">Nothing is watched until you enable a site.</p>
+          </div>
+        </div>
+
       </div>
     </details>
 

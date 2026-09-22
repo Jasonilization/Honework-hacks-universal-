@@ -35,6 +35,12 @@ const dom = {
   themeSelect: $("themeSelect"),
   includeWorkingToggle: $("includeWorkingToggle"),
   saveHistoryToggle: $("saveHistoryToggle"),
+  autoDetectToggle: $("autoDetectToggle"),
+  autoAnalyzeToggle: $("autoAnalyzeToggle"),
+  showIdentifierToggle: $("showIdentifierToggle"),
+  btnSiteToggle: $("btnSiteToggle"),
+  siteStatus: $("siteStatus"),
+  siteToggleLabel: $("siteToggleLabel"),
   historySection: $("historySection"),
   historyList: $("historyList"),
   historySearch: $("historySearch"),
@@ -75,6 +81,7 @@ async function init() {
 
 function renderState(state) {
   renderStatus(state);
+  renderDetected(state);
 
   if (state.analyzing) {
     renderLoading(state.analyzing.label);
@@ -133,6 +140,36 @@ function renderStatus(state) {
 
   dom.btnCancel.hidden = !state?.analyzing;
   dom.btnAnalyze.disabled = !!state?.analyzing;
+}
+
+/* ================================
+   DETECTED QUESTION
+================================ */
+
+function renderDetected(state) {
+  const detected = state?.detected;
+  dom.detectedBar.replaceChildren();
+
+  if (!detected || state?.lastResult?.hash === detected.hash) {
+    dom.detectedBar.hidden = true;
+    return;
+  }
+
+  dom.detectedBar.hidden = false;
+
+  if (detected.identifier && settings.showIdentifier) {
+    dom.detectedBar.append(el("span", { class: "chip", text: detected.identifier }));
+  }
+  dom.detectedBar.append(el("span", { class: "detected-text", text: detected.text }));
+
+  dom.detectedBar.append(
+    el("button", {
+      class: "btn btn-small",
+      type: "button",
+      text: "Analyze",
+      onclick: () => run(() => engine.analyzeDetected(detected))
+    })
+  );
 }
 
 /* ================================
@@ -340,6 +377,61 @@ function historyItem(entry) {
   );
 }
 
+async function toggleSiteDetection() {
+  const tab = await engine.getActiveTab();
+  let origin, hostname;
+  try {
+    const url = new URL(tab.url);
+    origin = url.origin;
+    hostname = url.hostname;
+  } catch {
+    showSiteStatus("Open the site's tab, then try again.");
+    return;
+  }
+
+  const enabled = settings.enabledSites.some((s) => s.origin === origin);
+
+  try {
+    if (enabled) {
+      await chrome.permissions.remove({ origins: [origin + "/*"] });
+      await chrome.runtime.sendMessage({ type: "site:disable", origin, hostname });
+      showSiteStatus(`Detection off for ${hostname}.`);
+    } else {
+      const granted = await chrome.permissions.request({ origins: [origin + "/*"] });
+      if (!granted) {
+        showSiteStatus(`Permission denied — detection needs access to ${hostname}.`);
+        return;
+      }
+      await chrome.runtime.sendMessage({
+        type: "site:enable",
+        origin,
+        hostname,
+        tabId: tab.id
+      });
+      showSiteStatus(`Watching ${hostname} for new questions.`);
+    }
+    settings = await getSettings();
+    refreshSiteToggle();
+  } catch (err) {
+    showSiteStatus(friendlyError(err));
+  }
+}
+
+function refreshSiteToggle() {
+  const site = settings.enabledSites[settings.enabledSites.length - 1];
+  const enabled = !!site;
+  dom.btnSiteToggle.textContent = enabled
+    ? `Stop watching ${site.hostname}`
+    : "Enable detection for the current site";
+  dom.siteToggleLabel.textContent = enabled
+    ? "Enabled sites"
+    : "This site";
+}
+
+function showSiteStatus(message) {
+  dom.siteStatus.textContent = message;
+}
+
 /* ================================
    SETTINGS
 ================================ */
@@ -407,6 +499,26 @@ function wireSettings() {
     settings = await setSettings({ saveHistory: dom.saveHistoryToggle.checked });
     renderHistory();
   });
+
+  /* detection */
+  dom.autoDetectToggle.checked = settings.autoDetect;
+  dom.autoDetectToggle.addEventListener("change", async () => {
+    settings = await setSettings({ autoDetect: dom.autoDetectToggle.checked });
+  });
+
+  dom.autoAnalyzeToggle.checked = settings.autoAnalyze;
+  dom.autoAnalyzeToggle.addEventListener("change", async () => {
+    settings = await setSettings({ autoAnalyze: dom.autoAnalyzeToggle.checked });
+  });
+
+  dom.showIdentifierToggle.checked = settings.showIdentifier;
+  dom.showIdentifierToggle.addEventListener("change", async () => {
+    settings = await setSettings({ showIdentifier: dom.showIdentifierToggle.checked });
+    renderHistory();
+  });
+
+  dom.btnSiteToggle.addEventListener("click", toggleSiteDetection);
+  refreshSiteToggle();
 
   onSettingsChanged((next) => {
     settings = next;

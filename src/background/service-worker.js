@@ -5,7 +5,7 @@
  * no longer aborts a running request.
  */
 
-import { get as getSettings } from "../storage/settings.js";
+import { get as getSettings, set as setSettings } from "../storage/settings.js";
 import { getProvider } from "../providers/registry.js";
 import { friendlyError } from "../core/errors.js";
 import { questionFingerprint } from "../core/normalize.js";
@@ -24,6 +24,12 @@ const state = {
 
 let currentAbort = null;
 let lastAction = null;
+
+/* Question hashes analyzed recently (auto mode only) — guards against
+ * DOM churn re-triggering the same question. Memory-only, cleared on
+ * worker restart, refreshed on every detection. */
+const recentHashes = new Map();
+const RECENT_WINDOW_MS = 10 * 60 * 1000;
 
 function post(port, message) {
   try {
@@ -54,6 +60,21 @@ chrome.runtime.onInstalled.addListener(() => {
   /* Runs the legacy geminiKey -> settings migration early. */
   getSettings();
 });
+
+/* Re-register detector scripts on worker wake (belt and suspenders —
+ * registrations persist, but nothing breaks if Chrome lost them). */
+restoreSiteRegistrations();
+
+async function restoreSiteRegistrations() {
+  try {
+    const settings = await getSettings();
+    for (const site of settings.enabledSites) {
+      await registerDetector(site.origin, site.hostname);
+    }
+  } catch {
+    /* storage not ready — the next message will retry */
+  }
+}
 
 /* ---------------- popup / panel connections ---------------- */
 
@@ -105,11 +126,130 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+
+      case "analyze:question": {
+        const settings = await getSettings();
+        if (!settings[settings.provider]?.apiKey) {
+          sendResponse({ ok: false, error: "Add your API key in Settings first." });
+          return;
+        }
+        recentHashes.set(message.hash, Date.now());
+        startAnalysis({ source: "detected", question: message.question });
+        sendResponse({ ok: true });
+        return;
+      }
+
+      case "question:detected": {
+        const settings = await getSettings();
+        const question = message.question;
+
+        const allowed =
+          settings.autoDetect &&
+          question?.origin &&
+          settings.enabledSites.some((s) => s.origin === question.origin);
+
+        if (!allowed) {
+          sendResponse({ ok: false });
+          return;
+        }
+
+        state.detected = { ...question, hash: message.hash, at: Date.now() };
+        broadcastState();
+
+        if (settings.autoAnalyze && settings[settings.provider]?.apiKey) {
+          const seenAt = recentHashes.get(message.hash);
+
+          if (!seenAt || Date.now() - seenAt > RECENT_WINDOW_MS) {
+            /* Reuse a stored result for the same question when we have one. */
+            const stored = await history.findByHash(message.hash);
+            if (stored) {
+              recentHashes.set(message.hash, Date.now());
+              state.lastResult = stored;
+              broadcastState();
+            } else {
+              recentHashes.set(message.hash, Date.now());
+              startAnalysis({ source: "detected", question });
+            }
+          }
+        }
+
+        sendResponse({ ok: true });
+        return;
+      }
+
+      case "site:enable": {
+        const { origin, hostname, tabId } = message;
+        const settings = await getSettings();
+        if (!settings.enabledSites.some((s) => s.origin === origin)) {
+          await setSettings({
+            enabledSites: [...settings.enabledSites, { origin, hostname }]
+          });
+        }
+        await registerDetector(origin, hostname);
+
+        /* Activate on the tab the user is looking at right now. */
+        try {
+          if (tabId) {
+            await chrome.scripting.executeScript({
+              target: { tabId },
+              files: ["src/content/content.js"]
+            });
+          }
+        } catch {
+          /* the page may not allow it; the registered script covers reloads */
+        }
+
+        sendResponse({ ok: true });
+        return;
+      }
+
+      case "site:disable": {
+        const { origin, hostname } = message;
+        const settings = await getSettings();
+        await setSettings({
+          enabledSites: settings.enabledSites.filter(
+            (s) => s.origin !== origin
+          )
+        });
+        try {
+          await chrome.scripting.unregisterContentScripts({
+            ids: [detectorId(hostname)]
+          });
+        } catch {
+          /* wasn't registered */
+        }
+        sendResponse({ ok: true });
+        return;
+      }
     }
   })();
 
   return true; /* async sendResponse */
 });
+
+function detectorId(hostname) {
+  return "sparxer-detect-" + hostname;
+}
+
+async function registerDetector(origin, hostname) {
+  const id = detectorId(hostname);
+  const registered = await chrome.scripting.getRegisteredContentScripts();
+  if (registered.some((s) => s.id === id)) return;
+
+  try {
+    await chrome.scripting.registerContentScripts([
+      {
+        id,
+        matches: [origin + "/*"],
+        js: ["src/content/content.js"],
+        runAt: "document_idle",
+        persistAcrossSessions: true
+      }
+    ]);
+  } catch {
+    /* origin permission may have been revoked — registration needs it */
+  }
+}
 
 /* ---------------- analysis ---------------- */
 
