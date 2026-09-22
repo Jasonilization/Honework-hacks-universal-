@@ -1,188 +1,126 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-
-    <meta charset="UTF-8">
-
-    <title>Sparx AI</title>
-
-    <link rel="stylesheet" href="popup.css">
-
+  <meta charset="UTF-8">
+  <title>Sparx AI</title>
+  <link rel="stylesheet" href="src/popup/popup.css">
 </head>
 
 <body>
+  <div id="app">
 
-    <div class="header">
-
-        <div>
-
-            <div class="logo">
-                SPARX<span>_AI</span>
-            </div>
-
-            <div class="subtitle">
-                MATHS INTELLIGENCE SYSTEM
-            </div>
-
-        </div>
-
-        <div class="status">
-
-            <span id="dot"></span>
-
-            <span id="statusText">
-                OFFLINE
-            </span>
-
-        </div>
-
-    </div>
-
-
-    <div class="line"></div>
-
-
-    <!-- API KEY -->
-
-    <div class="panel">
-
-        <div class="label">
-            GEMINI API KEY
-        </div>
-
-        <input
-            id="apiKey"
-            type="password"
-            placeholder="Paste Gemini API key"
-        >
-
-        <button id="saveKey">
-            [ SAVE KEY ]
+    <header class="hdr">
+      <div class="hdr-id">
+        <img class="hdr-logo" src="icons/icon32.png" alt="">
+        <span class="hdr-name">Sparx AI</span>
+      </div>
+      <div class="hdr-actions">
+        <span id="status" class="status" role="status" aria-live="polite" data-state="idle">
+          <span id="statusDot" class="status-dot"></span>
+          <span id="statusText">Loading…</span>
+        </span>
+        <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings"
+          aria-expanded="false" aria-controls="settingsPanel">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" />
+            <path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1" />
+          </svg>
         </button>
+      </div>
+    </header>
 
-    </div>
+    <main class="content" id="content">
 
+      <div id="detectedBar" class="detected-bar" hidden></div>
 
-    <!-- SCREEN SCANNER -->
+      <section id="resultCard" class="card" hidden></section>
 
-    <div class="panel">
+      <div class="action-row">
+        <button id="btnAnalyze" class="btn btn-primary">Analyze screen</button>
+        <button id="btnCancel" class="btn" hidden>Cancel</button>
+      </div>
+      <p class="action-hint">Captures the visible tab and solves the maths question on it.</p>
 
-        <div class="label">
-            SCREEN ANALYSIS
-        </div>
+    </main>
 
-        <div class="info">
+    <details id="settingsPanel" class="settings">
+      <summary>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+          stroke-width="1.4" aria-hidden="true">
+          <path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1" />
+        </svg>
+        Settings
+      </summary>
 
-            Captures the current browser tab
-            temporarily and asks Gemini to
-            analyse the visible maths question.
+      <div class="settings-body">
 
-        </div>
+        <div class="setting-group">
+          <div class="setting">
+            <label for="providerSelect">Provider</label>
+            <select id="providerSelect"></select>
+            <p class="setting-desc">Where your answers come from. Keys are stored only in this browser.</p>
+          </div>
 
-        <button id="scan">
-            [ ANALYZE CURRENT SCREEN ]
-        </button>
-
-    </div>
-
-
-    <!-- LOADING -->
-
-    <div id="loading" class="loading hidden">
-
-        <div>
-            <span class="blink">></span>
-            CAPTURING SCREEN...
-        </div>
-
-        <div>
-            <span class="blink">></span>
-            GEMINI PROCESSING...
-        </div>
-
-        <div id="loadingModel">
-            MODEL: STARTING
-        </div>
-
-    </div>
-
-
-    <!-- ERROR -->
-
-    <div
-        id="error"
-        class="error hidden"
-    ></div>
-
-
-    <!-- RESULT -->
-
-    <div
-        id="result"
-        class="hidden"
-    >
-
-        <div class="resultPanel">
-
-            <div class="label">
-                QUESTION
+          <div class="setting">
+            <label for="modelSelect">Model</label>
+            <select id="modelSelect"></select>
+            <div class="setting-inline" id="customModelWrap" hidden>
+              <label for="customModelInput">Custom model ID</label>
+              <input id="customModelInput" type="text" spellcheck="false" autocomplete="off"
+                placeholder="vendor/model-id">
             </div>
+          </div>
 
-            <div id="question"></div>
-
-        </div>
-
-
-        <div class="resultPanel answerPanel">
-
-            <div class="label">
-                ANSWER
+          <div class="setting">
+            <label for="apiKeyInput">API key</label>
+            <div class="key-row">
+              <input id="apiKeyInput" type="password" spellcheck="false" autocomplete="off"
+                placeholder="Paste your API key">
+              <button id="btnEye" class="icon-btn" aria-label="Show API key">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                  stroke-width="1.4" aria-hidden="true">
+                  <path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8Z" />
+                  <circle cx="8" cy="8" r="1.8" />
+                </svg>
+              </button>
             </div>
-
-            <div id="answer"></div>
-
-            <button id="copy">
-                [ COPY ANSWER ]
-            </button>
-
-        </div>
-
-
-        <div class="resultPanel">
-
-            <div class="label">
-                WORKING
+            <div class="key-actions">
+              <button id="btnTest" class="btn btn-small">Test connection</button>
+              <span id="testStatus" class="test-status" role="status" aria-live="polite"></span>
             </div>
-
-            <div id="steps"></div>
-
+          </div>
         </div>
 
+        <div class="setting-group">
+          <div class="setting">
+            <label for="themeSelect">Theme</label>
+            <select id="themeSelect">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
 
-        <div class="resultPanel">
-
-            <div class="label">
-                HINT
-            </div>
-
-            <div id="hint"></div>
-
+          <div class="setting setting-toggle">
+            <label for="includeWorkingToggle">Include working</label>
+            <p class="setting-desc">Show step-by-step working under each answer.</p>
+            <input type="checkbox" id="includeWorkingToggle" class="switch">
+          </div>
         </div>
 
-    </div>
+      </div>
+    </details>
 
+    <footer class="foot">
+      <span>AI answers can be wrong — always check them.</span>
+      <span id="footVersion"></span>
+    </footer>
 
-    <div class="footer">
+  </div>
 
-        SPARX AI //
-        TEMPORARY SCREEN ANALYSIS
-
-    </div>
-
-
-    <script type="module" src="popup.js"></script>
-
+  <script type="module" src="src/popup/popup.js"></script>
 </body>
 
 </html>
