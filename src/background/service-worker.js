@@ -6,8 +6,9 @@
  */
 
 import { get as getSettings, set as setSettings } from "../storage/settings.js";
-import { getProvider, isConfigured } from "../providers/registry.js";
-import { friendlyError } from "../core/errors.js";
+import { getProvider } from "../providers/registry.js";
+import { extractQuestionInPage } from "./page-extractor.js";
+import { friendlyError, ProviderError, ERROR_KINDS } from "../core/errors.js";
 import { questionFingerprint, extractBookworkCheck } from "../core/normalize.js";
 import * as history from "../storage/history.js";
 
@@ -56,11 +57,6 @@ chrome.storage.session.get("lastResult").then(({ lastResult }) => {
   }
 });
 
-chrome.runtime.onInstalled.addListener(() => {
-  /* Runs the legacy geminiKey -> settings migration early. */
-  getSettings();
-});
-
 /* Re-register detector scripts on worker wake (belt and suspenders —
  * registrations persist, but nothing breaks if Chrome lost them). */
 restoreSiteRegistrations();
@@ -90,16 +86,10 @@ chrome.runtime.onConnect.addListener((port) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
     switch (message?.type) {
-      case "analyze:screen": {
-        const settings = await getSettings();
-        if (!isConfigured(settings, settings.provider)) {
-          sendResponse({ ok: false, error: "Add your API key in Settings first." });
-          return;
-        }
+      case "analyze:page": {
         startAnalysis({
-          source: "screen",
+          source: "page",
           tabId: message.tabId,
-          windowId: message.windowId,
           site: message.site || ""
         });
         sendResponse({ ok: true });
@@ -109,11 +99,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "analyze:retry": {
         if (!lastAction) {
           sendResponse({ ok: false, error: "Nothing to retry." });
-          return;
-        }
-        const settings = await getSettings();
-        if (!isConfigured(settings, settings.provider)) {
-          sendResponse({ ok: false, error: "Add your API key in Settings first." });
           return;
         }
         startAnalysis(lastAction);
@@ -173,7 +158,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        if (settings.autoAnalyze && isConfigured(settings, settings.provider)) {
+        if (settings.autoAnalyze) {
           const seenAt = recentHashes.get(message.hash);
 
           if (!seenAt || Date.now() - seenAt > RECENT_WINDOW_MS) {
@@ -296,21 +281,44 @@ async function startAnalysis(action) {
     let input;
     let site = action.site || "";
 
-    if (action.source === "screen") {
-      const shot = await chrome.tabs.captureVisibleTab(action.windowId ?? null, {
-        format: "jpeg",
-        quality: settings.screenshotQuality
-      });
-      const comma = shot.indexOf(",");
-      if (comma === -1) throw new Error("Invalid screenshot.");
-      input = { imageBase64: shot.substring(comma + 1), mimeType: "image/jpeg" };
-    } else {
-      /* Text extracted from the page by the detector. */
+    if (action.source === "page" && !action.question) {
+      /* One-shot extraction on the active tab (activeTab covers it —
+       * no per-site permission needed for a manual analyze). */
+      let extracted = null;
+      try {
+        const [injection] = await chrome.scripting.executeScript({
+          target: { tabId: action.tabId },
+          func: extractQuestionInPage
+        });
+        extracted = injection?.result;
+      } catch {
+        throw new ProviderError(
+          ERROR_KINDS.REQUEST,
+          "Can't read this page. Open the homework question and try again."
+        );
+      }
+
+      if (!extracted?.text) {
+        throw new ProviderError(
+          ERROR_KINDS.REQUEST,
+          "No question found on the page. Make sure the question is visible, " +
+          "or enable detection for this site in Settings."
+        );
+      }
+
+      action.question = {
+        text: extracted.text,
+        identifier: extracted.identifier || "",
+        site: action.site || ""
+      };
+    }
+
+    if (action.question) {
       input = {
         questionText: action.question.text,
         identifier: action.question.identifier || ""
       };
-      site = action.question.site || "";
+      site = action.question.site || action.site || "";
     }
 
     const result = await provider.analyze(input, {

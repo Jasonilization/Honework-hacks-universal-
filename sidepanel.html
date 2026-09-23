@@ -18,7 +18,7 @@
       <div class="hdr-actions">
         <span id="status" class="status" role="status" aria-live="polite" data-state="idle">
           <span id="statusDot" class="status-dot"></span>
-          <span id="statusText">Loading…</span>
+          <span id="statusText">Checking…</span>
         </span>
         <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings"
           aria-expanded="false" aria-controls="settingsPanel">
@@ -38,9 +38,9 @@
       <section id="resultCard" class="card" hidden></section>
 
       <div class="action-row">
-        <button id="btnAnalyze" class="btn btn-primary">Analyze screen</button>
+        <button id="btnAnalyze" class="btn btn-primary">Analyze question</button>
       </div>
-      <p class="action-hint" id="actionHint">Captures the visible tab and solves the maths question on it.</p>
+      <p class="action-hint" id="actionHint">Reads the question from the page and solves it on this computer — no setup, no keys.</p>
 
       <section class="history" id="historySection" aria-label="History">
         <div class="history-head">
@@ -74,51 +74,7 @@
       <div class="settings-body">
 
         <div class="setting-group">
-          <div class="setting">
-            <label for="providerSelect">Provider</label>
-            <select id="providerSelect"></select>
-            <p class="setting-desc">Where your answers come from. Keys are stored only in this browser.</p>
-          </div>
-
-          <div class="setting" id="modelSetting">
-            <label for="modelSelect">Model</label>
-            <select id="modelSelect"></select>
-            <div class="setting-inline" id="customModelWrap" hidden>
-              <label for="customModelInput">Custom model ID</label>
-              <input id="customModelInput" type="text" spellcheck="false" autocomplete="off"
-                placeholder="vendor/model-id">
-            </div>
-          </div>
-
-          <div class="setting" id="keySetting">
-            <label for="apiKeyInput">API key</label>
-            <div class="key-row">
-              <input id="apiKeyInput" type="password" spellcheck="false" autocomplete="off"
-                placeholder="Paste your API key">
-              <button id="btnEye" class="icon-btn" aria-label="Show API key">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-                  stroke-width="1.4" aria-hidden="true">
-                  <path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8Z" />
-                  <circle cx="8" cy="8" r="1.8" />
-                </svg>
-              </button>
-            </div>
-            <div class="key-actions">
-              <button id="btnTest" class="btn btn-small">Test connection</button>
-              <span id="testStatus" class="test-status" role="status" aria-live="polite"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <div class="setting">
-            <label for="themeSelect">Theme</label>
-            <select id="themeSelect">
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
+          <h3 class="setting-group-title">Answers</h3>
 
           <div class="setting setting-toggle">
             <label for="includeWorkingToggle">Include working</label>
@@ -130,6 +86,12 @@
             <label for="saveHistoryToggle">Save history</label>
             <p class="setting-desc">Keep the last 200 questions in this browser so you can reopen them instantly.</p>
             <input type="checkbox" id="saveHistoryToggle" class="switch">
+          </div>
+
+          <div class="setting setting-toggle">
+            <label for="showIdentifierToggle">Show question identifier</label>
+            <p class="setting-desc">Show codes like 4A next to questions, results and history.</p>
+            <input type="checkbox" id="showIdentifierToggle" class="switch">
           </div>
         </div>
 
@@ -148,16 +110,23 @@
             <input type="checkbox" id="autoAnalyzeToggle" class="switch">
           </div>
 
-          <div class="setting setting-toggle">
-            <label for="showIdentifierToggle">Show question identifier</label>
-            <p class="setting-desc">Show codes like 4A next to questions, results and history entries.</p>
-            <input type="checkbox" id="showIdentifierToggle" class="switch">
-          </div>
-
           <div class="setting">
             <label id="siteToggleLabel">This site</label>
             <button id="btnSiteToggle" class="btn btn-small">Enable detection…</button>
             <p class="setting-desc" id="siteStatus">Nothing is watched until you enable a site.</p>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <h3 class="setting-group-title">Appearance</h3>
+
+          <div class="setting">
+            <label for="themeSelect">Theme</label>
+            <select id="themeSelect">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
           </div>
         </div>
 

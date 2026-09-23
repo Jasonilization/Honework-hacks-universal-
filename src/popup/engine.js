@@ -35,7 +35,7 @@ export async function getActiveTab() {
   return tab || null;
 }
 
-export async function analyzeScreen() {
+export async function analyzePage() {
   const tab = await getActiveTab();
   let site = "";
   try {
@@ -44,9 +44,8 @@ export async function analyzeScreen() {
     /* restricted page — fine */
   }
   const response = await chrome.runtime.sendMessage({
-    type: "analyze:screen",
+    type: "analyze:page",
     tabId: tab?.id,
-    windowId: tab?.windowId,
     site
   });
   if (response?.ok === false) throw new Error(response.error || "Could not start analysis.");

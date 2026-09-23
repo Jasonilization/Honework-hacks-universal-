@@ -1,13 +1,13 @@
 # Sparxer
 
 A browser extension that helps you work through maths homework platforms
-(Sparx Maths, Seneca, and others). It reads the question on your screen,
-solves it with an AI model, and keeps a searchable record of every answer —
-including Sparx bookwork codes, so bookwork checks are one click instead of
-a scramble through your exercise book.
+(Sparx Maths, Seneca, and others). It reads the question straight from the
+page, solves it with Chrome's built-in AI, and keeps a searchable record of
+every answer — including Sparx bookwork codes, so bookwork checks are one
+click instead of a scramble through your exercise book.
 
-You bring your own API key (Google Gemini is free; OpenRouter works too).
-Nothing is proxied through anyone else's server.
+No accounts. No API keys. Nothing leaves your computer — the model runs
+inside Chrome itself.
 
 ## Install
 
@@ -16,31 +16,21 @@ Nothing is proxied through anyone else's server.
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and select the folder.
 
-## Set up
+## Requirements
 
-**Zero-key option:** if your Chrome ships the built-in AI model
-(`LanguageModel`), pick **Chrome built-in AI** on first launch — it runs
-entirely inside Chrome, offline, and answers questions detected from the
-page. Enable detection on your homework site and you're done.
+Chrome with the built-in AI model (the `LanguageModel` API — recent stable
+versions). The model (~2 GB) downloads on first use if Chrome hasn't fetched
+it already. There is nothing else to configure — open the popup and press
+**Analyze question**.
 
-**Cloud option:** click the toolbar icon, open Settings, and paste a Gemini
-API key from <https://aistudio.google.com/app/api-keys> (free), then press
-**Test connection**. Supported providers:
-
-| Provider | Key needed? | Notes |
-|---|---|---|
-| Chrome built-in AI | No | Offline, private; solves detected questions (no screenshots) |
-| Ollama (local) | No | Your own models at localhost:11434; nothing leaves your machine |
-| Google Gemini | Free key | Default; reads screenshots |
-| OpenRouter | Key | One key, many models |
-| NVIDIA NIM | Free key | build.nvidia.com signup |
-
-Each provider only asks for the network access it needs when you select it.
+> Earlier versions supported cloud providers (Gemini, OpenRouter, NVIDIA
+> NIM, Ollama). v5.2 runs on the built-in model only; the provider contract
+> in `src/providers` remains, so a provider is still one file away.
 
 ## Everyday use
 
-- **Analyze screen** — captures the visible tab and solves the maths
-  question on it. The answer, working and hint appear in the popup. The
+- **Analyze question** — reads the question text straight from the active
+  tab (works on any site, no per-site setup) and solves it locally. The
   button itself shows progress while a request is in flight — click it
   again to cancel.
 - **Side panel** — the button next to Settings keeps Sparxer visible next
@@ -71,8 +61,6 @@ all detection everywhere immediately.
 
 | Setting | What it does |
 |---|---|
-| Provider / Model | Gemini (default) or OpenRouter, with model choice and custom model IDs |
-| API key | Stored only in this browser, sent only to your provider, never in URLs |
 | Theme | Light, dark, or follow the system |
 | Include working | Adds 2–6 solution steps under each answer |
 | Save history | Local-only, capped at 200 entries |
@@ -90,10 +78,9 @@ all detection everywhere immediately.
 | `sidePanel` | The optional keep-it-open side panel |
 | Gemini / OpenRouter host | Talks to the AI provider you configure |
 
-Screenshots and detected question text are sent only to the provider you
-configured and are never stored. History keeps question text, answer and
-code — no screenshots, no full URLs. The API key never appears in URLs or
-logs.
+Analysis happens inside Chrome's built-in model — there is no network
+request at all. History keeps question text, answer and code — no
+screenshots, no full URLs. Nothing is synced anywhere.
 
 ## Development
 

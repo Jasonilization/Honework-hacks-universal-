@@ -1,35 +1,23 @@
 /*
- * Provider registry — the UI and the background worker only ever talk to
- * this interface, so new providers (official APIs only) slot in here.
+ * Provider registry. Sparxer ships with exactly one provider: Chrome's
+ * built-in AI (local Gemini Nano) — no keys, no network, no accounts.
  *
- * Keyless providers (requiresApiKey: false) are "always available":
- * Chrome's built-in AI and a local Ollama. Vision-capable ones can read
- * screenshots; text-only ones work with DOM-detected questions.
+ * The provider contract (see chrome-local.js) is deliberate: a future
+ * cloud provider is one file that exports the same shape plus a registry
+ * line here. Nothing else in the codebase needs to change.
  */
 
-import { gemini } from "./gemini.js";
-import { openrouter } from "./openrouter.js";
-import { nvidia } from "./nvidia.js";
-import { ollama } from "./ollama.js";
 import { chromeLocal } from "./chrome-local.js";
 
-const PROVIDERS = {
-  gemini,
-  openrouter,
-  nvidia,
-  ollama,
-  "chrome-local": chromeLocal
-};
+const PROVIDERS = { "chrome-local": chromeLocal };
 
 export function getProvider(id) {
-  return PROVIDERS[id] || PROVIDERS.gemini;
+  return PROVIDERS[id] || chromeLocal;
 }
 
-/* True when a provider is usable right now (has a key if it needs one). */
-export function isConfigured(settings, providerId) {
-  const provider = getProvider(providerId);
-  if (!provider.requiresApiKey) return true;
-  return !!settings[providerId]?.apiKey;
+/* The built-in provider is always "configured" — there is no key. */
+export function isConfigured(_settings, _providerId) {
+  return true;
 }
 
 export function listProviders() {
@@ -37,10 +25,7 @@ export function listProviders() {
     id: p.id,
     label: p.label,
     capabilities: p.capabilities,
-    requiresApiKey: p.requiresApiKey === false ? false : true,
-    allowCustomModel: !!p.allowCustomModel,
-    hostPermission: p.hostPermission || null,
-    defaultModel: p.defaultModel,
+    requiresApiKey: false,
     models: p.models
   }));
 }

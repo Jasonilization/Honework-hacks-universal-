@@ -99,7 +99,7 @@ body {
 }
 
 body {
-  width: 360px;
+  width: 380px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -124,7 +124,7 @@ body.surface-panel {
 
 .content {
   flex: 1;
-  padding: 12px;
+  padding: 14px;
   overflow-y: auto;
 }
 
@@ -134,7 +134,7 @@ body.surface-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -344,7 +344,7 @@ svg {
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 14px;
   margin-bottom: 12px;
   background: var(--surface);
   box-shadow: var(--shadow);
@@ -721,7 +721,7 @@ details.working[open] summary .chev {
 .settings summary {
   cursor: pointer;
   list-style: none;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
@@ -740,11 +740,11 @@ details.working[open] summary .chev {
 }
 
 .settings-body {
-  padding: 4px 12px 14px;
+  padding: 4px 14px 16px;
 }
 
 .setting-group {
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--border);
 }
 
@@ -779,18 +779,6 @@ details.working[open] summary .chev {
 .setting-desc {
   margin: 4px 0 0;
   font-size: 11px;
-  color: var(--text-muted);
-}
-
-.setting-inline {
-  margin-top: 8px;
-}
-
-.setting-inline label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 4px;
   color: var(--text-muted);
 }
 
@@ -831,41 +819,6 @@ input[type="password"]:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
-}
-
-.key-row {
-  position: relative;
-}
-
-.key-row input {
-  padding-right: 32px;
-}
-
-.key-row .icon-btn {
-  position: absolute;
-  right: 3px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.key-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.test-status {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.test-status[data-ok="true"] {
-  color: var(--success);
-}
-
-.test-status[data-ok="false"] {
-  color: var(--danger);
 }
 
 /* switch */
@@ -916,7 +869,7 @@ details.working[open] .steps {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 9px 14px;
   border-top: 1px solid var(--border);
   font-size: 10.5px;
   color: var(--text-muted);

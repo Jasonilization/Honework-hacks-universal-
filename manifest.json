@@ -1,23 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Sparxer",
-  "version": "5.1.0",
-  "description": "AI maths study assistant - works offline with Chrome's built-in AI or your own API key.",
+  "version": "5.2.0",
+  "description": "AI maths study assistant that runs entirely inside Chrome - no accounts, no API keys.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "storage", "scripting", "sidePanel"],
-  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
-  "optional_host_permissions": [
-    "https://openrouter.ai/*",
-    "https://integrate.api.nvidia.com/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*",
-    "http://*/*",
-    "https://*/*"
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "sidePanel"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",
@@ -46,7 +42,14 @@
         "src/sites/sparx.js",
         "src/sites/index.js"
       ],
-      "matches": ["http://*/*", "https://*/*"]
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ]
 }

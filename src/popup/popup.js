@@ -1,14 +1,14 @@
 /*
  * Sparxer — popup controller.
- * Owns nothing but presentation: the analysis runs in the background
- * service worker (engine.js is the client), persistence lives in
- * src/storage and providers in src/providers.
+ * Presentation only: the analysis runs in the background service worker
+ * (engine.js is the client), persistence lives in src/storage, and the
+ * single provider is Chrome's built-in AI (src/providers/chrome-local.js).
  */
 
 import { get as getSettings, set as setSettings, onChanged as onSettingsChanged } from "../storage/settings.js";
 import * as history from "../storage/history.js";
-import { listProviders, getProvider, isConfigured } from "../providers/registry.js";
-import { friendlyError, ERROR_KINDS } from "../core/errors.js";
+import { getProvider } from "../providers/registry.js";
+import { friendlyError } from "../core/errors.js";
 import { applyTheme, watchSystem } from "./theme.js";
 import { icons, el, fmtDuration, fmtTime } from "./ui.js";
 import * as engine from "./engine.js";
@@ -25,14 +25,6 @@ const dom = {
   resultCard: $("resultCard"),
   btnAnalyze: $("btnAnalyze"),
   actionHint: $("actionHint"),
-  providerSelect: $("providerSelect"),
-  modelSelect: $("modelSelect"),
-  customModelWrap: $("customModelWrap"),
-  customModelInput: $("customModelInput"),
-  apiKeyInput: $("apiKeyInput"),
-  btnEye: $("btnEye"),
-  btnTest: $("btnTest"),
-  testStatus: $("testStatus"),
   themeSelect: $("themeSelect"),
   includeWorkingToggle: $("includeWorkingToggle"),
   saveHistoryToggle: $("saveHistoryToggle"),
@@ -54,19 +46,19 @@ let settings = null;
 let historyEntries = [];
 let historyQuery = "";
 let currentState = null;
-let hasKey = false;
-let builtinAvailable = false;
+let builtinAvailable = null; /* null = still checking */
 
-/* Built-in Chrome AI is the one true keyless path — check once. */
+/* Built-in Chrome AI is the only engine — check it once, then refresh the UI. */
 getProvider("chrome-local")
   .availability()
   .then((state) => {
     builtinAvailable = state !== "unavailable";
-    if (!hasKey && currentState && !currentState.lastResult) {
-      renderState(currentState || {});
-    }
+    if (settings) renderState(currentState || {});
   })
-  .catch(() => {});
+  .catch(() => {
+    builtinAvailable = false;
+    if (settings) renderState(currentState || {});
+  });
 
 /* ================================
    INIT
@@ -85,7 +77,6 @@ async function init() {
   wireActions();
   wireSettings();
   wireHistory();
-  applyProviderLayout();
   renderStatus(null);
 
   engine.onState(renderState);
@@ -109,8 +100,8 @@ function renderState(state) {
     renderError(safe.error.message);
   } else if (safe.lastResult) {
     renderResult(safe.lastResult);
-  } else if (!hasKey) {
-    renderSetup();
+  } else if (builtinAvailable === false) {
+    renderUnavailable();
   } else {
     clearCard();
   }
@@ -128,7 +119,7 @@ function wireActions() {
       engine.cancel().catch(() => {});
       return;
     }
-    run(engine.analyzeScreen);
+    run(engine.analyzePage);
   });
 
   /* Side panel (Chrome 116+): keep results visible while working through
@@ -162,16 +153,15 @@ async function run(action) {
 ================================ */
 
 function renderStatus(state) {
-  hasKey = !!settings[settings.provider]?.apiKey;
   const workerError = state?.error && !state?.analyzing;
 
   const value = state?.analyzing
     ? "analyzing"
     : workerError
       ? "error"
-      : hasKey
-        ? "ready"
-        : "warn";
+      : builtinAvailable === false
+        ? "warn"
+        : "ready";
 
   dom.status.dataset.state = value;
   dom.statusText.textContent =
@@ -179,27 +169,39 @@ function renderStatus(state) {
       ? "Working…"
       : value === "error"
         ? "Error"
-        : value === "ready"
-          ? "Ready"
-          : "Needs setup";
+        : value === "warn"
+          ? "No built-in AI"
+          : builtinAvailable === null
+            ? "Checking…"
+            : "Ready";
 }
 
 /* The analyze button IS the loading indicator: label, spinner and
  * phase live inside it, and clicking it again cancels. */
+let lastButtonHtml = "";
+
 function renderButton(state) {
   const btn = dom.btnAnalyze;
-  btn.classList.toggle("loading", !!state?.analyzing);
-  btn.disabled = false; /* stays clickable so it can cancel */
+  const analyzing = !!state?.analyzing;
 
-  if (state?.analyzing) {
-    const identifier = state.analyzing.identifier;
-    btn.innerHTML =
-      `<span class="spinner" aria-hidden="true"></span>` +
-      (identifier ? `Analyzing ${escapeHtml(identifier)}…` : "Analyzing…");
+  const html = analyzing
+    ? `<span class="spinner" aria-hidden="true"></span>` +
+      (state.analyzing.identifier
+        ? `Analyzing ${escapeHtml(state.analyzing.identifier)}…`
+        : "Analyzing…")
+    : "Analyze question";
+
+  if (html === lastButtonHtml) return; /* avoid needless re-paints */
+  lastButtonHtml = html;
+
+  btn.classList.toggle("loading", analyzing);
+  btn.disabled = false; /* stays clickable so it can cancel */
+  btn.innerHTML = html;
+
+  if (analyzing) {
     btn.setAttribute("aria-busy", "true");
     btn.title = "Click to cancel";
   } else {
-    btn.innerHTML = "Analyze screen";
     btn.removeAttribute("aria-busy");
     btn.title = "";
   }
@@ -305,69 +307,17 @@ function clearCard() {
   dom.resultCard.replaceChildren();
 }
 
-function renderSetup() {
+/* The one failure state left: this Chrome doesn't have the built-in model. */
+function renderUnavailable() {
   clearCard();
   dom.resultCard.hidden = false;
-
-  const card = dom.resultCard;
-  card.append(
-    el("h2", { class: "setup-title", text: "Almost there" }),
+  dom.resultCard.append(
+    el("h2", { class: "setup-title", text: "Chrome's built-in AI is needed" }),
     el("p", {
       class: "setup-text",
-      text: "Pick how you want Sparxer to solve questions. Your choice stays on this computer."
+      text: "Sparxer runs entirely on Chrome's built-in model — no keys, nothing leaves your computer. Update Chrome to the latest version, then reopen this popup."
     })
   );
-
-  if (builtinAvailable) {
-    card.append(
-      el("button", {
-        class: "btn btn-primary",
-        type: "button",
-        text: "Use built-in Chrome AI — free, offline, no key",
-        onclick: async () => {
-          settings = await setSettings({ provider: "chrome-local" });
-          dom.providerSelect.value = "chrome-local";
-          applyProviderLayout();
-          renderStatus(null);
-          renderState(currentState || {});
-        }
-      })
-    );
-    card.append(
-      el("p", {
-        class: "setup-text",
-        text: "Solves detected questions inside Chrome itself — nothing leaves your computer. Needs site detection enabled (Settings), and can't read screenshots."
-      })
-    );
-    card.append(
-      el("button", {
-        class: "btn btn-small",
-        type: "button",
-        text: "Or connect a cloud provider →",
-        onclick: () => {
-          dom.settingsPanel.open = true;
-          applyProviderLayout();
-          dom.apiKeyInput.focus();
-        }
-      })
-    );
-  } else {
-    card.append(
-      el("p", {
-        class: "setup-text",
-        text: "Connect a free Gemini key from aistudio.google.com/app/api-keys — it stays in this browser."
-      }),
-      el("button", {
-        class: "btn btn-primary",
-        type: "button",
-        text: "Connect Gemini",
-        onclick: () => {
-          dom.settingsPanel.open = true;
-          dom.apiKeyInput.focus();
-        }
-      })
-    );
-  }
 }
 
 function renderResult(result) {
@@ -380,7 +330,7 @@ function renderResult(result) {
   if (result.identifier && settings.showIdentifier) {
     context.append(el("span", { class: "chip", text: result.identifier }));
   }
-  context.append(el("span", { class: "context-site", text: result.site || "Screen capture" }));
+  context.append(el("span", { class: "context-site", text: result.site || "This page" }));
   context.append(el("span", { class: "context-time", text: timeShort(result.timestampMs) }));
   card.append(context);
 
@@ -431,7 +381,7 @@ function renderResult(result) {
 
   /* meta */
   const meta = el("div", { class: "badge-row" });
-  meta.append(el("span", { class: "badge-model", text: result.model || result.provider }));
+  meta.append(el("span", { class: "badge-model", text: "Built-in AI" }));
   if (result.durationMs) meta.append(el("span", { text: fmtDuration(result.durationMs) }));
   card.append(meta);
 }
@@ -450,6 +400,7 @@ function renderError(message) {
 }
 
 async function copyAnswer(text, button) {
+  if (!button) return;
   try {
     await navigator.clipboard.writeText(text);
     const original = button.innerHTML;
@@ -458,7 +409,10 @@ async function copyAnswer(text, button) {
       button.innerHTML = original;
     }, 1200);
   } catch {
-    dom.testStatus.textContent = "Copy failed.";
+    button.textContent = "Copy failed";
+    setTimeout(() => {
+      button.innerHTML = original;
+    }, 1200);
   }
 }
 
@@ -551,7 +505,6 @@ function historyItem(entry) {
   }
 
   const meta = el("div", { class: "history-meta" });
-  if (entry.model) meta.append(el("span", { text: entry.model }));
   if (entry.site) meta.append(el("span", { text: entry.site }));
   meta.append(el("span", { text: fmtTime(entry.timestampMs) }));
 
@@ -578,6 +531,10 @@ function historyItem(entry) {
     })
   );
 }
+
+/* ================================
+   SITE DETECTION
+================================ */
 
 async function toggleSiteDetection() {
   const tab = await engine.getActiveTab();
@@ -625,9 +582,7 @@ function refreshSiteToggle() {
   dom.btnSiteToggle.textContent = enabled
     ? `Stop watching ${site.hostname}`
     : "Enable detection for the current site";
-  dom.siteToggleLabel.textContent = enabled
-    ? "Enabled sites"
-    : "This site";
+  dom.siteToggleLabel.textContent = enabled ? "Enabled sites" : "This site";
 }
 
 function showSiteStatus(message) {
@@ -645,43 +600,6 @@ function wireSettings() {
       String(!dom.settingsPanel.open)
     );
   });
-
-  /* provider */
-  const providers = listProviders();
-  for (const p of providers) {
-    dom.providerSelect.append(el("option", { value: p.id, text: p.label }));
-  }
-  dom.providerSelect.value = settings.provider;
-  dom.providerSelect.addEventListener("change", () => switchProvider(dom.providerSelect.value));
-
-  /* model + key reflect the active provider */
-  populateModels();
-  loadProviderFields();
-
-  dom.modelSelect.addEventListener("change", () => {
-    if (dom.modelSelect.value === "__custom") return;
-    saveProvider({ model: dom.modelSelect.value });
-  });
-
-  dom.customModelInput.addEventListener("change", () => {
-    const value = dom.customModelInput.value.trim();
-    if (value) saveProvider({ model: value });
-  });
-
-  /* api key */
-  let saveTimer = null;
-  dom.apiKeyInput.addEventListener("input", () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveProvider({ apiKey: dom.apiKeyInput.value.trim() }), 500);
-  });
-
-  dom.btnEye.addEventListener("click", () => {
-    const hidden = dom.apiKeyInput.type === "password";
-    dom.apiKeyInput.type = hidden ? "text" : "password";
-    dom.btnEye.setAttribute("aria-label", hidden ? "Hide API key" : "Show API key");
-  });
-
-  dom.btnTest.addEventListener("click", testConnection);
 
   /* theme */
   dom.themeSelect.value = settings.theme;
@@ -726,6 +644,9 @@ function wireSettings() {
     settings = next;
     dom.includeWorkingToggle.checked = next.includeWorking;
     dom.saveHistoryToggle.checked = next.saveHistory;
+    dom.autoDetectToggle.checked = next.autoDetect;
+    dom.autoAnalyzeToggle.checked = next.autoAnalyze;
+    dom.showIdentifierToggle.checked = next.showIdentifier;
     if (dom.themeSelect.value !== next.theme) {
       dom.themeSelect.value = next.theme;
       applyTheme(next.theme);
@@ -733,110 +654,4 @@ function wireSettings() {
     renderHistory();
     renderStatus(null);
   });
-}
-
-function currentProviderSettings() {
-  return settings[settings.provider] || { apiKey: "", model: "" };
-}
-
-async function saveProvider(patch) {
-  const providerId = settings.provider;
-  settings = await setSettings({
-    [providerId]: { ...currentProviderSettings(), ...patch }
-  });
-  renderStatus(null);
-}
-
-function populateModels() {
-  const provider = getProvider(settings.provider);
-  const current = currentProviderSettings().model || provider.defaultModel;
-
-  dom.modelSelect.replaceChildren();
-  for (const m of provider.models) {
-    dom.modelSelect.append(el("option", { value: m.id, text: m.label }));
-  }
-
-  if (provider.allowCustomModel) {
-    if (!provider.models.some((m) => m.id === current)) {
-      dom.modelSelect.append(el("option", { value: "__custom", text: "Custom model" }));
-    }
-    dom.modelSelect.value = provider.models.some((m) => m.id === current) ? current : "__custom";
-    dom.customModelWrap.hidden = false;
-    dom.customModelInput.value = provider.models.some((m) => m.id === current) ? "" : current;
-  } else {
-    dom.modelSelect.value = provider.models.some((m) => m.id === current)
-      ? current
-      : provider.defaultModel;
-    dom.customModelWrap.hidden = true;
-  }
-}
-
-function loadProviderFields() {
-  const ps = currentProviderSettings();
-  dom.apiKeyInput.value = ps.apiKey || "";
-  dom.apiKeyInput.type = "password";
-}
-
-async function switchProvider(providerId) {
-  const provider = getProvider(providerId);
-
-  /* Providers may need their own network origin — ask from the user's
-   * own click, and only when it isn't already granted. */
-  if (provider.hostPermission?.origins?.length) {
-    const granted = await chrome.permissions.request({
-      origins: provider.hostPermission.origins
-    });
-    if (!granted) {
-      dom.providerSelect.value = settings.provider;
-      showTestStatus(
-        false,
-        `Permission denied — ${provider.label} needs network access.`
-      );
-      return;
-    }
-  }
-
-  settings = await setSettings({ provider: providerId });
-  populateModels();
-  loadProviderFields();
-  applyProviderLayout();
-  renderStatus(null);
-}
-
-/* Keyless providers hide the key field; the built-in model has no
- * model list either. */
-function applyProviderLayout() {
-  const provider = getProvider(settings.provider);
-  const keySetting = document.getElementById("keySetting");
-  const modelSetting = document.getElementById("modelSetting");
-  if (keySetting) keySetting.hidden = !provider.requiresApiKey;
-  if (modelSetting) modelSetting.hidden = provider.models.length === 0;
-}
-
-async function testConnection() {
-  const provider = getProvider(settings.provider);
-  const ps = currentProviderSettings();
-
-  if (provider.requiresApiKey && !ps.apiKey) {
-    showTestStatus(false, "Enter an API key first.");
-    return;
-  }
-
-  dom.btnTest.disabled = true;
-  showTestStatus(null, "Testing…");
-
-  try {
-    const outcome = await provider.testConnection(ps);
-    showTestStatus(outcome.ok, outcome.message);
-  } catch (err) {
-    showTestStatus(false, friendlyError(err));
-  } finally {
-    dom.btnTest.disabled = false;
-  }
-}
-
-function showTestStatus(ok, message) {
-  dom.testStatus.textContent = message || "";
-  if (ok === null) dom.testStatus.removeAttribute("data-ok");
-  else dom.testStatus.dataset.ok = String(ok);
 }
