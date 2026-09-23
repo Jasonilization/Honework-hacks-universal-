@@ -315,7 +315,7 @@ function renderUnavailable() {
     el("h2", { class: "setup-title", text: "Chrome's built-in AI is needed" }),
     el("p", {
       class: "setup-text",
-      text: "Sparxer runs entirely on Chrome's built-in model — no keys, nothing leaves your computer. Update Chrome to the latest version, then reopen this popup."
+      text: "Update Chrome, then reopen this popup."
     })
   );
 }

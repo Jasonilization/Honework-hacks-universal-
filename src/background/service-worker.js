@@ -261,7 +261,8 @@ async function startAnalysis(action) {
 
   const settings = await getSettings();
   const provider = getProvider(settings.provider);
-  const providerSettings = settings[provider.id];
+  /* The built-in provider has no sub-settings — don't assume they exist. */
+  const providerSettings = settings[provider.id] || {};
 
   const abort = new AbortController();
   currentAbort = abort;

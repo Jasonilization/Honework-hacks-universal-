@@ -40,7 +40,7 @@
       <div class="action-row">
         <button id="btnAnalyze" class="btn btn-primary">Analyze question</button>
       </div>
-      <p class="action-hint" id="actionHint">Reads the question from the page and solves it on this computer — no setup, no keys.</p>
+      <p class="action-hint" id="actionHint">Reads the question on this page and solves it locally.</p>
 
       <section class="history" id="historySection" aria-label="History">
         <div class="history-head">
@@ -78,19 +78,19 @@
 
           <div class="setting setting-toggle">
             <label for="includeWorkingToggle">Include working</label>
-            <p class="setting-desc">Show step-by-step working under each answer.</p>
+            <p class="setting-desc">Steps with each answer.</p>
             <input type="checkbox" id="includeWorkingToggle" class="switch">
           </div>
 
           <div class="setting setting-toggle">
             <label for="saveHistoryToggle">Save history</label>
-            <p class="setting-desc">Keep the last 200 questions in this browser so you can reopen them instantly.</p>
+            <p class="setting-desc">Store the last 200 questions locally.</p>
             <input type="checkbox" id="saveHistoryToggle" class="switch">
           </div>
 
           <div class="setting setting-toggle">
             <label for="showIdentifierToggle">Show question identifier</label>
-            <p class="setting-desc">Show codes like 4A next to questions, results and history.</p>
+            <p class="setting-desc">Show codes like 4A.</p>
             <input type="checkbox" id="showIdentifierToggle" class="switch">
           </div>
         </div>
@@ -100,13 +100,13 @@
 
           <div class="setting setting-toggle">
             <label for="autoDetectToggle">Detect questions</label>
-            <p class="setting-desc">Master switch. Watch the sites you enable for new questions — off stops all detection immediately.</p>
+            <p class="setting-desc">Watch enabled sites for new questions. Off stops everything.</p>
             <input type="checkbox" id="autoDetectToggle" class="switch">
           </div>
 
           <div class="setting setting-toggle">
             <label for="autoAnalyzeToggle">Auto-analyze new questions</label>
-            <p class="setting-desc">Solve newly detected questions automatically. Off shows a prompt you can click to analyze.</p>
+            <p class="setting-desc">Solve detected questions automatically.</p>
             <input type="checkbox" id="autoAnalyzeToggle" class="switch">
           </div>
 
