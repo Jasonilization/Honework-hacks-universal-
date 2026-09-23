@@ -6,7 +6,7 @@
  */
 
 import { get as getSettings, set as setSettings } from "../storage/settings.js";
-import { getProvider } from "../providers/registry.js";
+import { getProvider, isConfigured } from "../providers/registry.js";
 import { friendlyError } from "../core/errors.js";
 import { questionFingerprint, extractBookworkCheck } from "../core/normalize.js";
 import * as history from "../storage/history.js";
@@ -92,7 +92,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     switch (message?.type) {
       case "analyze:screen": {
         const settings = await getSettings();
-        if (!settings[settings.provider]?.apiKey) {
+        if (!isConfigured(settings, settings.provider)) {
           sendResponse({ ok: false, error: "Add your API key in Settings first." });
           return;
         }
@@ -112,7 +112,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
         const settings = await getSettings();
-        if (!settings[settings.provider]?.apiKey) {
+        if (!isConfigured(settings, settings.provider)) {
           sendResponse({ ok: false, error: "Add your API key in Settings first." });
           return;
         }
@@ -129,7 +129,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       case "analyze:question": {
         const settings = await getSettings();
-        if (!settings[settings.provider]?.apiKey) {
+        if (!isConfigured(settings, settings.provider)) {
           sendResponse({ ok: false, error: "Add your API key in Settings first." });
           return;
         }
@@ -173,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        if (settings.autoAnalyze && settings[settings.provider]?.apiKey) {
+        if (settings.autoAnalyze && isConfigured(settings, settings.provider)) {
           const seenAt = recentHashes.get(message.hash);
 
           if (!seenAt || Date.now() - seenAt > RECENT_WINDOW_MS) {
@@ -283,7 +283,14 @@ async function startAnalysis(action) {
   lastAction = action;
 
   const started = performance.now();
-  setState({ analyzing: { label: provider.label, startedAt: Date.now() }, error: null });
+  setState({
+    analyzing: {
+      label: provider.label,
+      identifier: action.question?.identifier || "",
+      startedAt: Date.now()
+    },
+    error: null
+  });
 
   try {
     let input;

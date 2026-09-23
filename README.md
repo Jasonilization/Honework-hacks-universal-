@@ -18,18 +18,31 @@ Nothing is proxied through anyone else's server.
 
 ## Set up
 
-1. Click the Sparxer toolbar icon.
-2. Open **Settings** and paste a Gemini API key from
-   <https://aistudio.google.com/app/api-keys> (free).
-3. Press **Test connection** — it should turn green.
+**Zero-key option:** if your Chrome ships the built-in AI model
+(`LanguageModel`), pick **Chrome built-in AI** on first launch — it runs
+entirely inside Chrome, offline, and answers questions detected from the
+page. Enable detection on your homework site and you're done.
 
-OpenRouter works the same way with a key from <https://openrouter.ai/keys>;
-the extension asks for the extra network permission when you select it.
+**Cloud option:** click the toolbar icon, open Settings, and paste a Gemini
+API key from <https://aistudio.google.com/app/api-keys> (free), then press
+**Test connection**. Supported providers:
+
+| Provider | Key needed? | Notes |
+|---|---|---|
+| Chrome built-in AI | No | Offline, private; solves detected questions (no screenshots) |
+| Ollama (local) | No | Your own models at localhost:11434; nothing leaves your machine |
+| Google Gemini | Free key | Default; reads screenshots |
+| OpenRouter | Key | One key, many models |
+| NVIDIA NIM | Free key | build.nvidia.com signup |
+
+Each provider only asks for the network access it needs when you select it.
 
 ## Everyday use
 
 - **Analyze screen** — captures the visible tab and solves the maths
-  question on it. The answer, working and hint appear in the popup.
+  question on it. The answer, working and hint appear in the popup. The
+  button itself shows progress while a request is in flight — click it
+  again to cancel.
 - **Side panel** — the button next to Settings keeps Sparxer visible next
   to your homework tab, so new results appear without opening anything.
 - **History** — every solved question is saved locally with its bookwork

@@ -8,16 +8,18 @@
   color-scheme: light;
 
   --bg: #ffffff;
-  --surface: #f7f8fa;
-  --surface-2: #eef0f3;
-  --text: #1a1d21;
+  --surface: #f8f9fb;
+  --surface-2: #eef0f4;
+  --text: #16294c;
   --text-muted: #5b636c;
   --border: #e3e5e8;
   --border-strong: #c9cdd3;
 
-  --accent: #3d56d6;
-  --accent-contrast: #ffffff;
-  --accent-soft: #eaedfb;
+  --accent: #e89b00;
+  --accent-contrast: #16294c;
+  --accent-soft: #fdf3d8;
+  --interactive: #16294c;
+  --focus: #16294c;
 
   --success: #1a7f37;
   --success-soft: #e6f4ea;
@@ -30,8 +32,37 @@
     "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  --radius: 8px;
-  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(22, 41, 76, 0.08), 0 1px 4px rgba(22, 41, 76, 0.05);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #101216;
+  --surface: #16181d;
+  --surface-2: #1d2026;
+  --text: #e6e8ec;
+  --text-muted: #9aa1ab;
+  --border: #2a2d33;
+  --border-strong: #3a3e46;
+
+  --accent: #f2a900;
+  --accent-contrast: #16294c;
+  --accent-soft: #2e2712;
+  --interactive: #f5c84c;
+  --focus: #f2a900;
+
+  --success: #4cc38a;
+  --success-soft: #12261a;
+  --danger: #f85149;
+  --danger-soft: #3a1417;
+  --warn: #d4a72c;
+  --warn-soft: #2d2410;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 :root[data-theme="dark"] {
@@ -189,8 +220,8 @@ button {
 input[type="text"],
 input[type="password"],
 select {
-  transition: background-color 0.12s ease, color 0.12s ease,
-    border-color 0.12s ease, opacity 0.12s ease;
+  transition: background-color 0.14s var(--ease), color 0.14s var(--ease),
+    border-color 0.14s var(--ease), opacity 0.14s var(--ease);
 }
 
 .btn {
@@ -199,8 +230,8 @@ select {
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-weight: 550;
-  transition: background-color 0.12s ease, filter 0.12s ease,
-    transform 0.08s ease;
+  transition: background-color 0.14s var(--ease), filter 0.14s var(--ease),
+    transform 0.14s var(--ease), box-shadow 0.14s var(--ease);
 }
 
 .btn:hover {
@@ -221,12 +252,38 @@ select {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-contrast);
-  font-weight: 600;
+  font-weight: 650;
+  border-radius: 999px;
+  padding: 9px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-shadow: var(--shadow);
 }
 
 .btn-primary:hover {
   background: var(--accent);
   filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.btn-primary .spinner {
+  border-color: color-mix(in srgb, var(--accent-contrast) 25%, transparent);
+  border-top-color: var(--accent-contrast);
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex: none;
+}
+
+.btn-primary.loading {
+  cursor: pointer;
 }
 
 .btn-small {
@@ -278,7 +335,7 @@ svg {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -290,8 +347,9 @@ svg {
   padding: 12px;
   margin-bottom: 12px;
   background: var(--surface);
-  animation: rise 140ms ease-out;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
+  box-shadow: var(--shadow);
+  animation: rise 160ms var(--ease);
+  transition: background-color 0.16s var(--ease), border-color 0.16s var(--ease);
 }
 
 .card-context {
@@ -310,7 +368,7 @@ svg {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--interactive);
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
@@ -434,17 +492,6 @@ details.working[open] summary .chev {
   color: var(--text-muted);
 }
 
-/* loading state */
-
-.loading-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-}
-
 .spinner {
   width: 14px;
   height: 14px;
@@ -455,15 +502,19 @@ details.working[open] summary .chev {
   flex: none;
 }
 
-.skeleton {
-  height: 12px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  animation: pulse 1.2s ease-in-out infinite;
+
+/* first-run setup */
+
+.setup-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 650;
 }
 
-.skeleton + .skeleton {
-  margin-top: 8px;
+.setup-text {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* error state */
@@ -488,7 +539,7 @@ details.working[open] summary .chev {
   padding: 8px 10px;
   margin-bottom: 12px;
   font-size: 12px;
-  animation: rise 140ms ease-out;
+  animation: rise 160ms var(--ease);
 }
 
 .detected-bar .chip {
@@ -614,7 +665,7 @@ details.working[open] summary .chev {
   max-width: 40%;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--accent);
+  color: var(--interactive);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -778,7 +829,7 @@ select {
 input[type="text"]:focus-visible,
 input[type="password"]:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -855,7 +906,7 @@ select:focus-visible {
 
 /* working steps slide in when expanded */
 details.working[open] .steps {
-  animation: rise 140ms ease-out;
+  animation: rise 160ms var(--ease);
 }
 
 /* ---------- footer ---------- */

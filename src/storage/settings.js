@@ -16,7 +16,10 @@ export const DEFAULTS = {
   saveHistory: true,
   enabledSites: [],         /* [{ origin, hostname }] — detection opt-in */
   gemini: { apiKey: "", model: "gemini-3.6-flash" },
-  openrouter: { apiKey: "", model: "google/gemini-2.5-flash" }
+  openrouter: { apiKey: "", model: "google/gemini-2.5-flash" },
+  nvidia: { apiKey: "", model: "meta/llama-3.2-90b-vision-instruct" },
+  ollama: { model: "llama3.2-vision" },
+  "chrome-local": {}
 };
 
 let migrated = false;
@@ -26,8 +29,14 @@ export async function get() {
   const stored = data[KEY] || {};
 
   const settings = { ...DEFAULTS, ...stored };
-  settings.gemini = { ...DEFAULTS.gemini, ...(stored.gemini || {}) };
-  settings.openrouter = { ...DEFAULTS.openrouter, ...(stored.openrouter || {}) };
+
+  /* merge every provider's sub-object so new providers get defaults */
+  for (const key of Object.keys(DEFAULTS)) {
+    if (DEFAULTS[key] && typeof DEFAULTS[key] === "object" && !Array.isArray(DEFAULTS[key])) {
+      settings[key] = { ...DEFAULTS[key], ...(stored[key] || {}) };
+    }
+  }
+
   if (!Array.isArray(settings.enabledSites)) settings.enabledSites = [];
 
   /* Legacy: v4 stored the key at the top level. */

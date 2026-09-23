@@ -39,9 +39,8 @@
 
       <div class="action-row">
         <button id="btnAnalyze" class="btn btn-primary">Analyze screen</button>
-        <button id="btnCancel" class="btn" hidden>Cancel</button>
       </div>
-      <p class="action-hint">Captures the visible tab and solves the maths question on it.</p>
+      <p class="action-hint" id="actionHint">Captures the visible tab and solves the maths question on it.</p>
 
       <section class="history" id="historySection" aria-label="History">
         <div class="history-head">
@@ -81,7 +80,7 @@
             <p class="setting-desc">Where your answers come from. Keys are stored only in this browser.</p>
           </div>
 
-          <div class="setting">
+          <div class="setting" id="modelSetting">
             <label for="modelSelect">Model</label>
             <select id="modelSelect"></select>
             <div class="setting-inline" id="customModelWrap" hidden>
@@ -91,7 +90,7 @@
             </div>
           </div>
 
-          <div class="setting">
+          <div class="setting" id="keySetting">
             <label for="apiKeyInput">API key</label>
             <div class="key-row">
               <input id="apiKeyInput" type="password" spellcheck="false" autocomplete="off"

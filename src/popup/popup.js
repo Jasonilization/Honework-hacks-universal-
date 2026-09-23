@@ -7,7 +7,7 @@
 
 import { get as getSettings, set as setSettings, onChanged as onSettingsChanged } from "../storage/settings.js";
 import * as history from "../storage/history.js";
-import { listProviders, getProvider } from "../providers/registry.js";
+import { listProviders, getProvider, isConfigured } from "../providers/registry.js";
 import { friendlyError, ERROR_KINDS } from "../core/errors.js";
 import { applyTheme, watchSystem } from "./theme.js";
 import { icons, el, fmtDuration, fmtTime } from "./ui.js";
@@ -24,7 +24,7 @@ const dom = {
   detectedBar: $("detectedBar"),
   resultCard: $("resultCard"),
   btnAnalyze: $("btnAnalyze"),
-  btnCancel: $("btnCancel"),
+  actionHint: $("actionHint"),
   providerSelect: $("providerSelect"),
   modelSelect: $("modelSelect"),
   customModelWrap: $("customModelWrap"),
@@ -53,6 +53,20 @@ const dom = {
 let settings = null;
 let historyEntries = [];
 let historyQuery = "";
+let currentState = null;
+let hasKey = false;
+let builtinAvailable = false;
+
+/* Built-in Chrome AI is the one true keyless path — check once. */
+getProvider("chrome-local")
+  .availability()
+  .then((state) => {
+    builtinAvailable = state !== "unavailable";
+    if (!hasKey && currentState && !currentState.lastResult) {
+      renderState(currentState || {});
+    }
+  })
+  .catch(() => {});
 
 /* ================================
    INIT
@@ -71,6 +85,8 @@ async function init() {
   wireActions();
   wireSettings();
   wireHistory();
+  applyProviderLayout();
+  renderStatus(null);
 
   engine.onState(renderState);
   loadHistory();
@@ -81,15 +97,20 @@ async function init() {
 ================================ */
 
 function renderState(state) {
-  renderStatus(state);
-  renderDetected(state);
+  const safe = state || {};
+  currentState = state;
+  renderStatus(safe);
+  renderDetected(safe);
+  renderButton(safe);
 
-  if (state.analyzing) {
-    renderLoading(state.analyzing.label);
-  } else if (state.error) {
-    renderError(state.error.message);
-  } else if (state.lastResult) {
-    renderResult(state.lastResult);
+  if (safe.analyzing) {
+    clearCard(); /* the button carries the loading state */
+  } else if (safe.error) {
+    renderError(safe.error.message);
+  } else if (safe.lastResult) {
+    renderResult(safe.lastResult);
+  } else if (!hasKey) {
+    renderSetup();
   } else {
     clearCard();
   }
@@ -100,8 +121,15 @@ function renderState(state) {
 ================================ */
 
 function wireActions() {
-  dom.btnAnalyze.addEventListener("click", () => run(engine.analyzeScreen));
-  dom.btnCancel.addEventListener("click", () => engine.cancel().catch(() => {}));
+  /* One button does everything: Analyze -> becomes the progress/cancel
+   * control while a request is in flight, then returns. */
+  dom.btnAnalyze.addEventListener("click", () => {
+    if (currentState?.analyzing) {
+      engine.cancel().catch(() => {});
+      return;
+    }
+    run(engine.analyzeScreen);
+  });
 
   /* Side panel (Chrome 116+): keep results visible while working through
    * questions. The worker broadcasts to every attached surface, so the
@@ -134,7 +162,7 @@ async function run(action) {
 ================================ */
 
 function renderStatus(state) {
-  const hasKey = !!settings[settings.provider]?.apiKey;
+  hasKey = !!settings[settings.provider]?.apiKey;
   const workerError = state?.error && !state?.analyzing;
 
   const value = state?.analyzing
@@ -148,15 +176,39 @@ function renderStatus(state) {
   dom.status.dataset.state = value;
   dom.statusText.textContent =
     value === "analyzing"
-      ? "Analyzing…"
+      ? "Working…"
       : value === "error"
         ? "Error"
         : value === "ready"
           ? "Ready"
-          : "API key needed";
+          : "Needs setup";
+}
 
-  dom.btnCancel.hidden = !state?.analyzing;
-  dom.btnAnalyze.disabled = !!state?.analyzing;
+/* The analyze button IS the loading indicator: label, spinner and
+ * phase live inside it, and clicking it again cancels. */
+function renderButton(state) {
+  const btn = dom.btnAnalyze;
+  btn.classList.toggle("loading", !!state?.analyzing);
+  btn.disabled = false; /* stays clickable so it can cancel */
+
+  if (state?.analyzing) {
+    const identifier = state.analyzing.identifier;
+    btn.innerHTML =
+      `<span class="spinner" aria-hidden="true"></span>` +
+      (identifier ? `Analyzing ${escapeHtml(identifier)}…` : "Analyzing…");
+    btn.setAttribute("aria-busy", "true");
+    btn.title = "Click to cancel";
+  } else {
+    btn.innerHTML = "Analyze screen";
+    btn.removeAttribute("aria-busy");
+    btn.title = "";
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 /* ================================
@@ -253,18 +305,69 @@ function clearCard() {
   dom.resultCard.replaceChildren();
 }
 
-function renderLoading(label) {
+function renderSetup() {
   clearCard();
   dom.resultCard.hidden = false;
-  dom.resultCard.append(
-    el("div", { class: "loading-status" },
-      el("span", { class: "spinner", "aria-hidden": "true" }),
-      el("span", { id: "loadingLabel", text: label ? `Waiting for ${label}…` : "Analyzing…" })
-    ),
-    el("div", { class: "skeleton" }),
-    el("div", { class: "skeleton", style: "width: 60%" }),
-    el("div", { class: "skeleton", style: "width: 40%" })
+
+  const card = dom.resultCard;
+  card.append(
+    el("h2", { class: "setup-title", text: "Almost there" }),
+    el("p", {
+      class: "setup-text",
+      text: "Pick how you want Sparxer to solve questions. Your choice stays on this computer."
+    })
   );
+
+  if (builtinAvailable) {
+    card.append(
+      el("button", {
+        class: "btn btn-primary",
+        type: "button",
+        text: "Use built-in Chrome AI — free, offline, no key",
+        onclick: async () => {
+          settings = await setSettings({ provider: "chrome-local" });
+          dom.providerSelect.value = "chrome-local";
+          applyProviderLayout();
+          renderStatus(null);
+          renderState(currentState || {});
+        }
+      })
+    );
+    card.append(
+      el("p", {
+        class: "setup-text",
+        text: "Solves detected questions inside Chrome itself — nothing leaves your computer. Needs site detection enabled (Settings), and can't read screenshots."
+      })
+    );
+    card.append(
+      el("button", {
+        class: "btn btn-small",
+        type: "button",
+        text: "Or connect a cloud provider →",
+        onclick: () => {
+          dom.settingsPanel.open = true;
+          applyProviderLayout();
+          dom.apiKeyInput.focus();
+        }
+      })
+    );
+  } else {
+    card.append(
+      el("p", {
+        class: "setup-text",
+        text: "Connect a free Gemini key from aistudio.google.com/app/api-keys — it stays in this browser."
+      }),
+      el("button", {
+        class: "btn btn-primary",
+        type: "button",
+        text: "Connect Gemini",
+        onclick: () => {
+          dom.settingsPanel.open = true;
+          dom.apiKeyInput.focus();
+        }
+      })
+    );
+  }
 }
 
 function renderResult(result) {
@@ -675,27 +778,46 @@ function loadProviderFields() {
 }
 
 async function switchProvider(providerId) {
-  if (providerId === "openrouter") {
-    /* OpenRouter talks to a host that isn't in the base manifest —
-     * request it here, from the user's own click. */
+  const provider = getProvider(providerId);
+
+  /* Providers may need their own network origin — ask from the user's
+   * own click, and only when it isn't already granted. */
+  if (provider.hostPermission?.origins?.length) {
     const granted = await chrome.permissions.request({
-      origins: ["https://openrouter.ai/*"]
+      origins: provider.hostPermission.origins
     });
     if (!granted) {
       dom.providerSelect.value = settings.provider;
-      showTestStatus(false, "Permission denied — OpenRouter needs network access.");
+      showTestStatus(
+        false,
+        `Permission denied — ${provider.label} needs network access.`
+      );
       return;
     }
   }
+
   settings = await setSettings({ provider: providerId });
   populateModels();
   loadProviderFields();
+  applyProviderLayout();
   renderStatus(null);
 }
 
+/* Keyless providers hide the key field; the built-in model has no
+ * model list either. */
+function applyProviderLayout() {
+  const provider = getProvider(settings.provider);
+  const keySetting = document.getElementById("keySetting");
+  const modelSetting = document.getElementById("modelSetting");
+  if (keySetting) keySetting.hidden = !provider.requiresApiKey;
+  if (modelSetting) modelSetting.hidden = provider.models.length === 0;
+}
+
 async function testConnection() {
+  const provider = getProvider(settings.provider);
   const ps = currentProviderSettings();
-  if (!ps.apiKey) {
+
+  if (provider.requiresApiKey && !ps.apiKey) {
     showTestStatus(false, "Enter an API key first.");
     return;
   }
@@ -704,7 +826,6 @@ async function testConnection() {
   showTestStatus(null, "Testing…");
 
   try {
-    const provider = getProvider(settings.provider);
     const outcome = await provider.testConnection(ps);
     showTestStatus(outcome.ok, outcome.message);
   } catch (err) {
