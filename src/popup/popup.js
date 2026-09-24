@@ -39,6 +39,11 @@ const dom = {
   historySearch: $("historySearch"),
   historyEmpty: $("historyEmpty"),
   btnClearHistory: $("btnClearHistory"),
+  diagWorker: $("diagWorker"),
+  diagPopup: $("diagPopup"),
+  diagTrace: $("diagTrace"),
+  btnDiagRefresh: $("btnDiagRefresh"),
+  btnDiagCopy: $("btnDiagCopy"),
   footVersion: $("footVersion")
 };
 
@@ -105,6 +110,8 @@ function renderState(state) {
   } else {
     clearCard();
   }
+
+  renderDiag(safe);
 }
 
 /* ================================
@@ -184,11 +191,11 @@ function renderButton(state) {
   const btn = dom.btnAnalyze;
   const analyzing = !!state?.analyzing;
 
+  /* The worker drives the label: "Reading page…", "Solving 4A…",
+   * "Downloading model — 42%"… */
   const html = analyzing
     ? `<span class="spinner" aria-hidden="true"></span>` +
-      (state.analyzing.identifier
-        ? `Analyzing ${escapeHtml(state.analyzing.identifier)}…`
-        : "Analyzing…")
+      escapeHtml(state.analyzing.label || "Analyzing…")
     : "Analyze question";
 
   if (html === lastButtonHtml) return; /* avoid needless re-paints */
@@ -421,6 +428,53 @@ function timeShort(ts) {
 }
 
 /* ================================
+   DIAGNOSTICS
+================================ */
+
+function renderDiag(state) {
+  const diag = state?.diag || {};
+  const worker = diag.workerStatus;
+
+  dom.diagWorker.textContent = worker
+    ? `Worker: ${worker.state} — ${worker.note}`
+    : "Worker: not checked yet (press Re-check)";
+
+  const trace = diag.trace || [];
+  dom.diagTrace.hidden = trace.length === 0;
+  dom.diagTrace.textContent = trace
+    .slice(-8)
+    .map((line) => `${timeShort(line.t)}  ${line.step}${line.detail ? " — " + line.detail : ""}`)
+    .join("\n");
+}
+
+async function refreshPopupDiag() {
+  const status = await getProvider("chrome-local").status();
+  dom.diagPopup.textContent = `Popup: ${status.state} — ${status.note}`;
+  return status;
+}
+
+async function buildDiagReport() {
+  const manifest = chrome.runtime.getManifest();
+  const popup = await getProvider("chrome-local").status();
+  const worker = currentState?.diag?.workerStatus || { state: "unknown", note: "not checked" };
+  const trace = (currentState?.diag?.trace || [])
+    .map((l) => `${timeShort(l.t)} ${l.step}${l.detail ? " — " + l.detail : ""}`)
+    .join("\n");
+
+  return [
+    `Sparxer v${manifest.version}`,
+    `Chrome: ${navigator.userAgent}`,
+    `Worker context: ${worker.state} — ${worker.note}`,
+    `Popup context: ${popup.state} — ${popup.note}`,
+    `Sites enabled: ${settings.enabledSites.length}`,
+    `autoDetect=${settings.autoDetect} autoAnalyze=${settings.autoAnalyze} saveHistory=${settings.saveHistory}`,
+    "",
+    "Trace:",
+    trace || "(nothing ran yet)"
+  ].join("\n");
+}
+
+/* ================================
    HISTORY
 ================================ */
 
@@ -639,6 +693,22 @@ function wireSettings() {
 
   dom.btnSiteToggle.addEventListener("click", toggleSiteDetection);
   refreshSiteToggle();
+
+  /* diagnostics */
+  refreshPopupDiag();
+  dom.btnDiagRefresh.addEventListener("click", async () => {
+    dom.btnDiagRefresh.disabled = true;
+    try {
+      await chrome.runtime.sendMessage({ type: "diag:check" });
+      await refreshPopupDiag();
+    } finally {
+      dom.btnDiagRefresh.disabled = false;
+    }
+  });
+  dom.btnDiagCopy.addEventListener("click", async (ev) => {
+    const report = await buildDiagReport();
+    copyAnswer(report, ev.currentTarget);
+  });
 
   onSettingsChanged((next) => {
     settings = next;

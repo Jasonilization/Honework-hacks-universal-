@@ -17,10 +17,11 @@ import * as history from "../storage/history.js";
 const ports = new Set();
 
 const state = {
-  analyzing: null,   /* { label, startedAt } */
+  analyzing: null,   /* { label, identifier, startedAt } */
   lastResult: null,  /* full normalized result */
   detected: null,    /* latest detected question (filled by detection) */
-  error: null        /* { message } */
+  error: null,       /* { message } */
+  diag: { trace: [], workerStatus: null }
 };
 
 let currentAbort = null;
@@ -48,6 +49,25 @@ function setState(patch) {
   Object.assign(state, patch);
   broadcastState();
 }
+
+/* Step log for the Diagnostics panel — also printed to the worker
+ * console (visible via chrome://extensions -> service worker). */
+function trace(entry) {
+  const line = { t: Date.now(), ...entry };
+  console.log("[Sparxer]", line.step, entry.detail || "");
+  state.diag.trace.push(line);
+  if (state.diag.trace.length > 14) state.diag.trace.shift();
+  broadcastState();
+}
+
+/* Worker-side built-in AI status for the Diagnostics panel. */
+getProvider("chrome-local")
+  .status()
+  .then((workerStatus) => {
+    state.diag.workerStatus = workerStatus;
+    broadcastState();
+  })
+  .catch(() => {});
 
 /* Restore the last result of this browser session when the worker wakes. */
 chrome.storage.session.get("lastResult").then(({ lastResult }) => {
@@ -103,6 +123,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         startAnalysis(lastAction);
         sendResponse({ ok: true });
+        return;
+      }
+
+      case "diag:check": {
+        const workerStatus = await getProvider("chrome-local").status();
+        state.diag.workerStatus = workerStatus;
+        broadcastState();
+        sendResponse({ ok: true, workerStatus });
         return;
       }
 
@@ -269,14 +297,20 @@ async function startAnalysis(action) {
   lastAction = action;
 
   const started = performance.now();
-  setState({
-    analyzing: {
-      label: provider.label,
-      identifier: action.question?.identifier || "",
-      startedAt: Date.now()
-    },
-    error: null
-  });
+
+  const setLabel = (label) => {
+    setState({
+      analyzing: {
+        label,
+        identifier: action.question?.identifier || "",
+        startedAt: state.analyzing?.startedAt || Date.now()
+      }
+    });
+  };
+
+  setLabel("Reading page…");
+  setState({ error: null });
+  trace({ step: "start", detail: action.source });
 
   try {
     let input;
@@ -300,12 +334,18 @@ async function startAnalysis(action) {
       }
 
       if (!extracted?.text) {
+        trace({ step: "extract-empty" });
         throw new ProviderError(
           ERROR_KINDS.REQUEST,
           "No question found on the page. Make sure the question is visible, " +
           "or enable detection for this site in Settings."
         );
       }
+
+      trace({
+        step: "extracted",
+        detail: `${extracted.text.length} chars${extracted.identifier ? " · " + extracted.identifier : ""}`
+      });
 
       action.question = {
         text: extracted.text,
@@ -320,14 +360,29 @@ async function startAnalysis(action) {
         identifier: action.question.identifier || ""
       };
       site = action.question.site || action.site || "";
+      setLabel(
+        action.question.identifier
+          ? `Solving ${action.question.identifier}…`
+          : "Solving…"
+      );
     }
 
+    const solvingLabel = action.question?.identifier
+      ? `Solving ${action.question.identifier}…`
+      : "Solving…";
+
     const result = await provider.analyze(input, {
-      apiKey: providerSettings.apiKey,
-      model: providerSettings.model,
       includeWorking: settings.includeWorking,
-      signal: abort.signal
+      signal: abort.signal,
+      /* Download progress surfaces on the button itself. */
+      onProgress: (fraction) =>
+        setLabel(
+          fraction >= 1
+            ? solvingLabel
+            : `Downloading model — ${Math.max(1, Math.round(fraction * 100))}%`
+        )
     });
+    setLabel(solvingLabel);
 
     const full = stampResult(result, {
       providerId: provider.id,
@@ -341,11 +396,13 @@ async function startAnalysis(action) {
     }
 
     await chrome.storage.session.set({ lastResult: full });
+    trace({ step: "done", detail: full.answer });
     setState({ analyzing: null, lastResult: full, error: null });
   } catch (err) {
     /* A newer request may have superseded this one — leave its state alone. */
     if (currentAbort !== abort) return;
 
+    trace({ step: "error", detail: friendlyError(err) });
     setState({
       analyzing: null,
       error: { message: friendlyError(err), kind: err?.kind || "" }

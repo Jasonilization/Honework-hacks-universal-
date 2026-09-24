@@ -862,6 +862,21 @@ details.working[open] .steps {
   animation: rise 160ms var(--ease);
 }
 
+/* diagnostics trace */
+
+.diag-trace {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+}
+
 /* ---------- footer ---------- */
 
 .foot {
