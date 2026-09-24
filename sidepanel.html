@@ -117,6 +117,24 @@
           </div>
         </div>
 
+        <div class="setting-group" id="cloudGroup">
+          <h3 class="setting-group-title">Cloud fallback</h3>
+          <p class="setting-desc">Only used when Chrome's on-device model isn't available — like on this machine. Free key:
+            aistudio.google.com/app/api-keys.</p>
+
+          <div class="setting" id="keySetting">
+            <label for="apiKeyInput">Gemini API key</label>
+            <div class="key-row">
+              <input id="apiKeyInput" type="password" spellcheck="false" autocomplete="off"
+                placeholder="Paste your API key">
+            </div>
+            <div class="key-actions">
+              <button id="btnTest" class="btn btn-small" type="button">Test</button>
+              <span id="testStatus" class="test-status" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+        </div>
+
         <div class="setting-group">
           <h3 class="setting-group-title">Appearance</h3>
 

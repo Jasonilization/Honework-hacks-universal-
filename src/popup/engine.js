@@ -8,7 +8,10 @@ let port = null;
 const listeners = new Set();
 
 function emit(message) {
-  for (const listener of listeners) listener(message);
+  /* Listeners receive the state object, not the envelope. */
+  if (message?.type === "state") {
+    for (const listener of listeners) listener(message.state);
+  }
 }
 
 function connect() {

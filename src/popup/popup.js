@@ -39,6 +39,10 @@ const dom = {
   historySearch: $("historySearch"),
   historyEmpty: $("historyEmpty"),
   btnClearHistory: $("btnClearHistory"),
+  cloudGroup: $("cloudGroup"),
+  apiKeyInput: $("apiKeyInput"),
+  btnTest: $("btnTest"),
+  testStatus: $("testStatus"),
   diagWorker: $("diagWorker"),
   diagPopup: $("diagPopup"),
   diagTrace: $("diagTrace"),
@@ -57,11 +61,11 @@ let builtinAvailable = null; /* null = still checking */
 getProvider("chrome-local")
   .availability()
   .then((state) => {
-    builtinAvailable = state !== "unavailable";
+    builtinAvailable = state;
     if (settings) renderState(currentState || {});
   })
   .catch(() => {
-    builtinAvailable = false;
+    builtinAvailable = "unavailable";
     if (settings) renderState(currentState || {});
   });
 
@@ -93,8 +97,9 @@ async function init() {
 ================================ */
 
 function renderState(state) {
+  if (state && state.type === "state") state = state.state; /* envelope safety */
   const safe = state || {};
-  currentState = state;
+  currentState = safe;
   renderStatus(safe);
   renderDetected(safe);
   renderButton(safe);
@@ -105,12 +110,13 @@ function renderState(state) {
     renderError(safe.error.message);
   } else if (safe.lastResult) {
     renderResult(safe.lastResult);
-  } else if (builtinAvailable === false) {
+  } else if (builtinAvailable === "unavailable" && !settings.gemini?.apiKey) {
     renderUnavailable();
   } else {
     clearCard();
   }
 
+  applyEngineLayout();
   renderDiag(safe);
 }
 
@@ -161,14 +167,17 @@ async function run(action) {
 
 function renderStatus(state) {
   const workerError = state?.error && !state?.analyzing;
+  const hasCloud = !!settings?.gemini?.apiKey;
+  const localReady = builtinAvailable === "readily";
+  const usable = localReady || hasCloud;
 
   const value = state?.analyzing
     ? "analyzing"
     : workerError
       ? "error"
-      : builtinAvailable === false
-        ? "warn"
-        : "ready";
+      : usable
+        ? "ready"
+        : "warn";
 
   dom.status.dataset.state = value;
   dom.statusText.textContent =
@@ -177,10 +186,12 @@ function renderStatus(state) {
       : value === "error"
         ? "Error"
         : value === "warn"
-          ? "No built-in AI"
+          ? "Needs setup"
           : builtinAvailable === null
             ? "Checking…"
-            : "Ready";
+            : localReady
+              ? "Ready"
+              : "Ready (cloud)";
 }
 
 /* The analyze button IS the loading indicator: label, spinner and
@@ -319,10 +330,19 @@ function renderUnavailable() {
   clearCard();
   dom.resultCard.hidden = false;
   dom.resultCard.append(
-    el("h2", { class: "setup-title", text: "Chrome's built-in AI is needed" }),
+    el("h2", { class: "setup-title", text: "No engine available" }),
     el("p", {
       class: "setup-text",
-      text: "Update Chrome, then reopen this popup."
+      text: "This Chrome can't run the on-device model yet. Add a free Gemini key in Settings — it takes a minute and Sparxer switches to it automatically."
+    }),
+    el("button", {
+      class: "btn btn-primary",
+      type: "button",
+      text: "Add a free key",
+      onclick: () => {
+        dom.settingsPanel.open = true;
+        dom.apiKeyInput.focus();
+      }
     })
   );
 }
@@ -388,7 +408,7 @@ function renderResult(result) {
 
   /* meta */
   const meta = el("div", { class: "badge-row" });
-  meta.append(el("span", { class: "badge-model", text: "Built-in AI" }));
+  meta.append(el("span", { class: "badge-model", text: result.model || "Sparxer" }));
   if (result.durationMs) meta.append(el("span", { text: fmtDuration(result.durationMs) }));
   card.append(meta);
 }
@@ -643,6 +663,20 @@ function showSiteStatus(message) {
   dom.siteStatus.textContent = message;
 }
 
+/* The cloud-fallback group only matters when the on-device model
+ * isn't ready on this machine. */
+function applyEngineLayout() {
+  if (dom.cloudGroup) {
+    dom.cloudGroup.hidden = builtinAvailable === "readily";
+  }
+}
+
+function showTest(ok, message) {
+  dom.testStatus.textContent = message || "";
+  if (ok === null) dom.testStatus.removeAttribute("data-ok");
+  else dom.testStatus.dataset.ok = String(ok);
+}
+
 /* ================================
    SETTINGS
 ================================ */
@@ -693,6 +727,42 @@ function wireSettings() {
 
   dom.btnSiteToggle.addEventListener("click", toggleSiteDetection);
   refreshSiteToggle();
+
+  /* cloud fallback */
+  const savedGemini = settings.gemini || {};
+  dom.apiKeyInput.value = savedGemini.apiKey || "";
+  let keyTimer = null;
+  dom.apiKeyInput.addEventListener("input", () => {
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(async () => {
+      settings = await setSettings({
+        gemini: { ...(settings.gemini || {}), apiKey: dom.apiKeyInput.value.trim() }
+      });
+      renderState(currentState || {});
+      renderStatus(null);
+    }, 400);
+  });
+
+  dom.btnTest.addEventListener("click", async () => {
+    const provider = getProvider("gemini");
+    const key = dom.apiKeyInput.value.trim();
+    if (!key) {
+      showTest(false, "Paste a key first.");
+      return;
+    }
+    dom.btnTest.disabled = true;
+    showTest(null, "Testing…");
+    try {
+      const outcome = await provider.testConnection({ apiKey: key, model: (settings.gemini || {}).model });
+      showTest(outcome.ok, outcome.message);
+    } catch (err) {
+      showTest(false, friendlyError(err));
+    } finally {
+      dom.btnTest.disabled = false;
+    }
+  });
+
+  applyEngineLayout();
 
   /* diagnostics */
   refreshPopupDiag();

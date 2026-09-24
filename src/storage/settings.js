@@ -8,6 +8,7 @@ const KEY = "settings";
 
 export const DEFAULTS = {
   theme: "system",          /* "system" | "light" | "dark" */
+  gemini: { apiKey: "", model: "gemini-3.6-flash" },  /* cloud fallback */
   includeWorking: true,
   autoDetect: true,         /* master switch for all question detection */
   autoAnalyze: false,

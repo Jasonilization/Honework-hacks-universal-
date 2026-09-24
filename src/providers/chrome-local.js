@@ -27,10 +27,20 @@ export const chromeLocal = {
   /* "readily" | "after-download" | "downloading" | "unavailable" */
   async availability() {
     if (!("LanguageModel" in globalThis)) return "unavailable";
+    /* Newer builds warn unless a language is declared. */
+    const hint = {
+      expectedInputs: [{ type: "text", languages: ["en"] }],
+      expectedOutputs: [{ type: "text", languages: ["en"] }]
+    };
     try {
-      return await LanguageModel.availability();
-    } catch (err) {
-      return "unavailable";
+      return await LanguageModel.availability(hint);
+    } catch {
+      /* Older shapes may reject the hint — plain call. */
+      try {
+        return await LanguageModel.availability();
+      } catch {
+        return "unavailable";
+      }
     }
   },
 

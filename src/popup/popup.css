@@ -862,6 +862,34 @@ details.working[open] .steps {
   animation: rise 160ms var(--ease);
 }
 
+.key-row {
+  position: relative;
+}
+
+.key-row input {
+  padding-right: 12px;
+}
+
+.key-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.test-status {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.test-status[data-ok="true"] {
+  color: var(--success);
+}
+
+.test-status[data-ok="false"] {
+  color: var(--danger);
+}
+
 /* diagnostics trace */
 
 .diag-trace {

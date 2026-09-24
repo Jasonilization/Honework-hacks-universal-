@@ -6,7 +6,7 @@
  */
 
 import { get as getSettings, set as setSettings } from "../storage/settings.js";
-import { getProvider } from "../providers/registry.js";
+import { pickEngine, getProvider as getProviderOrLocal } from "../providers/registry.js";
 import { extractQuestionInPage } from "./page-extractor.js";
 import { friendlyError, ProviderError, ERROR_KINDS } from "../core/errors.js";
 import { questionFingerprint, extractBookworkCheck } from "../core/normalize.js";
@@ -61,7 +61,7 @@ function trace(entry) {
 }
 
 /* Worker-side built-in AI status for the Diagnostics panel. */
-getProvider("chrome-local")
+getProviderOrLocal()
   .status()
   .then((workerStatus) => {
     state.diag.workerStatus = workerStatus;
@@ -107,7 +107,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
     switch (message?.type) {
       case "analyze:page": {
-        startAnalysis({
+        startAnalysisSafe({
           source: "page",
           tabId: message.tabId,
           site: message.site || ""
@@ -121,13 +121,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: "Nothing to retry." });
           return;
         }
-        startAnalysis(lastAction);
+        startAnalysisSafe(lastAction);
         sendResponse({ ok: true });
         return;
       }
 
       case "diag:check": {
-        const workerStatus = await getProvider("chrome-local").status();
+        const workerStatus = await getProviderOrLocal("chrome-local").status();
         state.diag.workerStatus = workerStatus;
         broadcastState();
         sendResponse({ ok: true, workerStatus });
@@ -141,13 +141,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
 
       case "analyze:question": {
-        const settings = await getSettings();
-        if (!isConfigured(settings, settings.provider)) {
-          sendResponse({ ok: false, error: "Add your API key in Settings first." });
-          return;
-        }
+        /* Engine availability is checked inside startAnalysis — it throws
+         * a precise, actionable error if nothing is usable. */
         recentHashes.set(message.hash, Date.now());
-        startAnalysis({ source: "detected", question: message.question });
+        startAnalysisSafe({ source: "detected", question: message.question });
         sendResponse({ ok: true });
         return;
       }
@@ -198,7 +195,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               broadcastState();
             } else {
               recentHashes.set(message.hash, Date.now());
-              startAnalysis({ source: "detected", question });
+              startAnalysisSafe({ source: "detected", question });
             }
           }
         }
@@ -252,10 +249,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
     }
-  })();
+  })().catch((err) => {
+    /* Never let a rejection escape — Chrome terminates workers on
+     * unhandled rejections. Answer the popup if we still can. */
+    console.error("[Sparxer] message handler failed:", err);
+    try {
+      sendResponse({ ok: false, error: friendlyError(err) });
+    } catch {
+      /* channel already closed */
+    }
+  });
 
   return true; /* async sendResponse */
 });
+
+/* Fire-and-forget wrapper: never lets a rejection escape. */
+function startAnalysisSafe(action) {
+  startAnalysis(action).catch((err) => {
+    console.error("[Sparxer] analysis crashed:", err);
+  });
+}
 
 function detectorId(hostname) {
   return "sparxer-detect-" + hostname;
@@ -287,11 +300,9 @@ async function startAnalysis(action) {
   /* Supersede any in-flight request instead of queueing. */
   if (currentAbort) currentAbort.abort();
 
-  const settings = await getSettings();
-  const provider = getProvider(settings.provider);
-  /* The built-in provider has no sub-settings — don't assume they exist. */
-  const providerSettings = settings[provider.id] || {};
-
+  /* Abort controller FIRST so every later throw (engine pick included)
+   * lands inside the catch guard — an unhandled rejection would get the
+   * whole service worker killed by Chrome. */
   const abort = new AbortController();
   currentAbort = abort;
   lastAction = action;
@@ -308,11 +319,19 @@ async function startAnalysis(action) {
     });
   };
 
-  setLabel("Reading page…");
-  setState({ error: null });
-  trace({ step: "start", detail: action.source });
-
   try {
+    /* Everything lives inside the try: an escaping rejection would get
+     * the whole worker killed by Chrome. */
+    const settings = await getSettings();
+    const engine = await pickEngine(settings);
+    const provider = engine.provider;
+    trace({ step: "engine", detail: engine.engine });
+    const providerSettings = engine.engineSettings || {};
+
+    setLabel("Reading page…");
+    setState({ error: null });
+    trace({ step: "start", detail: action.source });
+
     let input;
     let site = action.site || "";
 
@@ -372,6 +391,8 @@ async function startAnalysis(action) {
       : "Solving…";
 
     const result = await provider.analyze(input, {
+      apiKey: providerSettings.apiKey,
+      model: providerSettings.model,
       includeWorking: settings.includeWorking,
       signal: abort.signal,
       /* Download progress surfaces on the button itself. */
